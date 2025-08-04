@@ -189,9 +189,9 @@ const WorkTimeTracker = () => {
       // Il tempo richiesto è 7h12m + 30min pausa obbligatoria = 462 min (+ permesso)
       const totalRaw = diffMinutes(morningInDate, finalOutDate);
       let total = totalRaw - PAUSA_OBBLIGATORIA_MIN; // SOTTRAI i 30 min di pausa obbligatoria
-      // Se entrambe le checkbox sono selezionate, NON sottrarre i 30 min
+      // Se entrambe le checkbox sono selezionate, togli sempre i 30 min
       if (usedPermit && pauseNoExit) {
-        total = totalRaw;
+        total = totalRaw - PAUSA_OBBLIGATORIA_MIN;
       }
       let debt = 0;
       let credit = 0;
@@ -422,7 +422,7 @@ const WorkTimeTracker = () => {
             Ore lavorate (escluse pause):{" "}
             <strong>
               {usedPermit && pauseNoExit
-                ? `${Math.floor(calculated.totalRaw / 60)}h ${Math.round(calculated.totalRaw % 60)}m`
+                ? `${Math.floor((calculated.totalRaw - PAUSA_OBBLIGATORIA_MIN) / 60)}h ${Math.round((calculated.totalRaw - PAUSA_OBBLIGATORIA_MIN) % 60)}m`
                 : usedPermit && calculated.permitDuration > 0
                   ? `${Math.floor(calculated.totalWithPermit / 60)}h ${Math.round(calculated.totalWithPermit % 60)}m`
                   : `${Math.floor(calculated.total / 60)}h ${Math.round(calculated.total % 60)}m`
