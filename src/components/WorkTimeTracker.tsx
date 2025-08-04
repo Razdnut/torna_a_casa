@@ -220,10 +220,14 @@ const WorkTimeTracker = () => {
 
   const extraLunchPause = lunchPauseMins > 30 ? lunchPauseMins - 30 : 0;
 
-  // Calcolo debito giornaliero se ore lavorate < 7h12m
+  // Calcolo debito e credito giornaliero
   const debtMins = totalWorkedMins < WORK_DURATION_MIN ? WORK_DURATION_MIN - totalWorkedMins : 0;
   const debtHours = Math.floor(debtMins / 60);
   const debtMinutes = Math.round(debtMins % 60);
+
+  const creditMins = totalWorkedMins > WORK_DURATION_MIN ? totalWorkedMins - WORK_DURATION_MIN : 0;
+  const creditHours = Math.floor(creditMins / 60);
+  const creditMinutes = Math.round(creditMins % 60);
 
   return (
     <div className="max-w-md mx-auto p-6 bg-white rounded-md shadow-md">
@@ -328,6 +332,11 @@ const WorkTimeTracker = () => {
           {debtMins > 0 && (
             <p className="text-red-700 font-semibold">
               Debito giornaliero: {debtHours}h {debtMinutes}m
+            </p>
+          )}
+          {creditMins > 0 && (
+            <p className="text-green-700 font-semibold">
+              Credito giornaliero: {creditHours}h {creditMinutes}m
             </p>
           )}
         </div>
