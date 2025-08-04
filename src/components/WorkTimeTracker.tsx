@@ -298,6 +298,26 @@ const WorkTimeTracker = () => {
     });
   };
 
+  // --- LOGICA VISUALIZZAZIONE ORE LAVORATE ---
+  function getVisualWorkedMinutes() {
+    if (!calculated) return 0;
+    // Caso: entrambe le checkbox selezionate e pausa senza uscita
+    if (usedPermit && pauseNoExit) {
+      // Se raggiunto il tempo minimo, somma anche il permesso
+      if (calculated.reachedWorkTime) {
+        return calculated.total + calculated.permitDuration;
+      } else {
+        return calculated.total;
+      }
+    }
+    // Caso: permesso usato in modalità normale
+    if (usedPermit && calculated.permitDuration > 0) {
+      return calculated.totalWithPermit;
+    }
+    // Caso base
+    return calculated.total;
+  }
+
   return (
     <div className="max-w-md mx-auto p-6 bg-white rounded-md shadow-md">
       <h2 className="text-2xl font-semibold mb-4 text-center">
@@ -452,14 +472,10 @@ const WorkTimeTracker = () => {
           <p>
             Ore lavorate (escluse pause):{" "}
             <strong>
-              {usedPermit && pauseNoExit
-                ? calculated.reachedWorkTime
-                  ? `${Math.floor(calculated.totalWithPermitIfReached / 60)}h ${Math.round(calculated.totalWithPermitIfReached % 60)}m`
-                  : `${Math.floor(calculated.total / 60)}h ${Math.round(calculated.total % 60)}m`
-                : usedPermit && calculated.permitDuration > 0
-                  ? `${Math.floor(calculated.totalWithPermit / 60)}h ${Math.round(calculated.totalWithPermit % 60)}m`
-                  : `${Math.floor(calculated.total / 60)}h ${Math.round(calculated.total % 60)}m`
-              }
+              {(() => {
+                const min = getVisualWorkedMinutes();
+                return `${Math.floor(min / 60)}h ${Math.round(min % 60)}m`;
+              })()}
             </strong>
           </p>
           {calculated.debt > 0 && (
