@@ -225,7 +225,11 @@ const WorkTimeTracker = () => {
   const debtHours = Math.floor(debtMins / 60);
   const debtMinutes = Math.round(debtMins % 60);
 
-  const creditMins = totalWorkedMins > WORK_DURATION_MIN ? totalWorkedMins - WORK_DURATION_MIN : 0;
+  // Credito solo se non c'è debito pausa extra
+  const creditMins =
+    totalWorkedMins > WORK_DURATION_MIN && extraLunchPause === 0
+      ? totalWorkedMins - WORK_DURATION_MIN
+      : 0;
   const creditHours = Math.floor(creditMins / 60);
   const creditMinutes = Math.round(creditMins % 60);
 
