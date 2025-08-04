@@ -152,8 +152,6 @@ const WorkTimeTracker = () => {
       }
     }
 
-    const limitTime = fromMinutes(LATEST_3H36M_TIME);
-
     let workBy1412 = 0;
     if (lunchOutDate && lunchInDate) {
       if (toMinutes(lunchOutDate) <= LATEST_3H36M_TIME) {
@@ -217,24 +215,19 @@ const WorkTimeTracker = () => {
   const extraLunchPause = lunchPauseMins > 30 ? lunchPauseMins - 30 : 0;
 
   // Calcolo debito e credito considerando il debito pausa e il tempo extra lavorato
-  let remainingLunchDebt = extraLunchPause;
   let creditMins = 0;
   let debtMins = 0;
 
-  if (totalWorkedMins < WORK_DURATION_MIN) {
-    // Debito giornaliero se ore lavorate inferiori a 7h12m
-    // Debito totale = differenza da 7h12m + debito pausa extra residuo
-    debtMins = WORK_DURATION_MIN - totalWorkedMins + remainingLunchDebt;
-    remainingLunchDebt = 0; // Debito pausa sommato al debito giornaliero
-  } else {
-    // Se ho lavorato di più, uso il tempo extra per scalare il debito pausa
-    const extraTime = totalWorkedMins - WORK_DURATION_MIN;
-    if (extraTime >= remainingLunchDebt) {
-      creditMins = extraTime - remainingLunchDebt;
-      remainingLunchDebt = 0;
+  if (morningInDate && finalOutDate) {
+    // Tempo totale trascorso tra ingresso e uscita
+    const totalTime = diffMinutes(morningInDate, finalOutDate);
+    // Debito totale richiesto = lavoro + pausa pranzo conteggiata
+    const requiredTime = WORK_DURATION_MIN + lunchPauseMins;
+
+    if (totalTime < requiredTime) {
+      debtMins = requiredTime - totalTime;
     } else {
-      remainingLunchDebt = remainingLunchDebt - extraTime;
-      creditMins = 0;
+      creditMins = totalTime - requiredTime;
     }
   }
 
@@ -329,7 +322,7 @@ const WorkTimeTracker = () => {
         </div>
       )}
 
-      {totalWorkedMins > 0 && (
+      {morningInDate && finalOutDate && (
         <div className="mt-4">
           <p>
             Ore lavorate (escluse pausa):{" "}
