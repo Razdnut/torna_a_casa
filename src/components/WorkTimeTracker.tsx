@@ -68,6 +68,37 @@ const WorkTimeTracker = () => {
   const [error, setError] = useState<string | null>(null);
   const [info, setInfo] = useState<string | null>(null);
 
+  // Function to calculate predicted final out time based on current inputs
+  const calculatePredictedFinalOut = () => {
+    const morningInDate = parseTime(morningIn);
+    if (!morningInDate) {
+      setError("Inserire un orario di ingresso mattina valido");
+      return;
+    }
+    const lunchOutDate = parseTime(lunchOut);
+    const lunchInDate = parseTime(lunchIn);
+
+    let lunchPauseMins = 30;
+    if (lunchOutDate && lunchInDate) {
+      const actualLunchPause = diffMinutes(lunchOutDate, lunchInDate);
+      lunchPauseMins = actualLunchPause < 30 ? 30 : actualLunchPause;
+    }
+
+    const extraRecovery = lunchPauseMins > 30 ? lunchPauseMins - 30 : 0;
+    const predictedFinalOutMins =
+      toMinutes(morningInDate) + WORK_DURATION_MIN + LUNCH_MIN + extraRecovery;
+
+    if (predictedFinalOutMins > OFFICE_CLOSE) {
+      setError(
+        "L'orario di uscita previsto supera l'orario di chiusura dell'ufficio (19:00)",
+      );
+      return;
+    }
+
+    setError(null);
+    setCalculatedFinalOut(formatTime(fromMinutes(predictedFinalOutMins)));
+  };
+
   useEffect(() => {
     setError(null);
     setInfo(null);
@@ -190,18 +221,6 @@ const WorkTimeTracker = () => {
       lunchPauseMins = actualLunchPause < 30 ? 30 : actualLunchPause;
     }
 
-    const extraRecovery = lunchPauseMins > 30 ? lunchPauseMins - 30 : 0;
-    const predictedFinalOutMins =
-      toMinutes(morningInDate) + WORK_DURATION_MIN + LUNCH_MIN + extraRecovery;
-
-    if (predictedFinalOutMins > OFFICE_CLOSE) {
-      setError(
-        "L'orario di uscita previsto supera l'orario di chiusura dell'ufficio (19:00)",
-      );
-      setCalculatedFinalOut("");
-      return;
-    }
-
     let workBy1412 = 0;
     const limitTime = LATEST_3H36M_TIME;
 
@@ -225,7 +244,7 @@ const WorkTimeTracker = () => {
 
     if (lunchOutDate && lunchInDate) {
       const workedBeforeLunch = diffMinutes(morningInDate, lunchOutDate);
-      const workedAfterLunch = predictedFinalOutMins - toMinutes(lunchInDate);
+      const workedAfterLunch = (calcFinalOutDate ? toMinutes(calcFinalOutDate) : 0) - toMinutes(lunchInDate);
       const totalWork = workedBeforeLunch + workedAfterLunch;
 
       if (totalWork < MIN_WORK_FOR_LUNCH) {
@@ -243,8 +262,9 @@ const WorkTimeTracker = () => {
         : null,
     );
 
-    setCalculatedFinalOut(formatTime(fromMinutes(predictedFinalOutMins)));
-  }, [morningIn, lunchOut, lunchIn, finalOut, extraEntrances, extraExits]);
+    // Non calcoliamo più automaticamente qui il calculatedFinalOut
+    // Lo calcoliamo solo quando l'utente clicca il pulsante
+  }, [morningIn, lunchOut, lunchIn, finalOut, extraEntrances, extraExits, calculatedFinalOut]);
 
   const addExtraEntrance = () => {
     setExtraEntrances((prev) => [...prev, ""]);
@@ -314,16 +334,17 @@ const WorkTimeTracker = () => {
     lunchPauseMins = actualLunchPause < 30 ? 30 : actualLunchPause;
   }
 
-  const effectiveWorkMins = totalWorkedMins - lunchPauseMins;
+  // Non sottraiamo più la pausa pranzo nel debito/credito
+  const effectiveWorkMins = totalWorkedMins;
 
   let creditMins = 0;
   let debtMins = 0;
 
   if (morningInDate && (finalOutDate || calculatedFinalOutDate || allExits.length > 0)) {
-    if (effectiveWorkMins < WORK_DURATION_MIN) {
-      debtMins = WORK_DURATION_MIN - effectiveWorkMins;
+    if (effectiveWorkMins < WORK_DURATION_MIN + lunchPauseMins) {
+      debtMins = WORK_DURATION_MIN + lunchPauseMins - effectiveWorkMins;
     } else {
-      creditMins = effectiveWorkMins - WORK_DURATION_MIN;
+      creditMins = effectiveWorkMins - (WORK_DURATION_MIN + lunchPauseMins);
     }
   }
 
@@ -476,6 +497,12 @@ const WorkTimeTracker = () => {
           ))}
         </div>
       </form>
+
+      <div className="mt-4">
+        <Button onClick={calculatePredictedFinalOut} className="w-full" variant="default">
+          Calcola orario uscita
+        </Button>
+      </div>
 
       {error && (
         <div className="mt-4 p-3 bg-red-100 text-red-700 rounded">{error}</div>
