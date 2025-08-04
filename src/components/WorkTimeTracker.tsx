@@ -175,88 +175,103 @@ const WorkTimeTracker = () => {
         return;
       }
     }
+  }, [morningIn, lunchOut, lunchIn, finalOut, extraEntrances, extraExits]);
 
-    // Parse all times
-    const timesEntrances: Date[] = [];
-    const timesExits: Date[] = [];
-
-    timesEntrances.push(morningInDate);
-    extraEntrances.forEach((t) => {
-      const d = parseTime(t);
-      if (d) timesEntrances.push(d);
+  const addExtraEntrance = () => {
+    setExtraEntrances((prev) => [...prev, ""]);
+  };
+  const updateExtraEntrance = (index: number, value: TimeString) => {
+    setExtraEntrances((prev) => {
+      const copy = [...prev];
+      copy[index] = value;
+      return copy;
     });
-    if (lunchInDate) timesEntrances.push(lunchInDate);
+  };
+  const removeExtraEntrance = (index: number) => {
+    setExtraEntrances((prev) => prev.filter((_, i) => i !== index));
+  };
 
-    if (lunchOutDate) timesExits.push(lunchOutDate);
-    extraExits.forEach((t) => {
-      const d = parseTime(t);
-      if (d) timesExits.push(d);
+  const addExtraExit = () => {
+    setExtraExits((prev) => [...prev, ""]);
+  };
+  const updateExtraExit = (index: number, value: TimeString) => {
+    setExtraExits((prev) => {
+      const copy = [...prev];
+      copy[index] = value;
+      return copy;
     });
+  };
+  const removeExtraExit = (index: number) => {
+    setExtraExits((prev) => prev.filter((_, i) => i !== index));
+  };
 
-    const finalOutDate = parseTime(finalOut);
-    const calcFinalOutDate = calculatedFinalOut ? parseTime(calculatedFinalOut) : null;
+  const morningInDate = parseTime(morningIn);
+  const lunchOutDate = parseTime(lunchOut);
+  const lunchInDate = parseTime(lunchIn);
+  const finalOutDate = parseTime(finalOut);
+  const calculatedFinalOutDate = calculatedFinalOut ? parseTime(calculatedFinalOut) : null;
 
-    if (finalOutDate) {
-      timesExits.push(finalOutDate);
-    } else if (calcFinalOutDate) {
-      timesExits.push(calcFinalOutDate);
+  const allEntrances: Date[] = [];
+  const allExits: Date[] = [];
+
+  if (morningInDate) allEntrances.push(morningInDate);
+  extraEntrances.forEach((t) => {
+    const d = parseTime(t);
+    if (d) allEntrances.push(d);
+  });
+  if (lunchInDate) allEntrances.push(lunchInDate);
+
+  if (lunchOutDate) allExits.push(lunchOutDate);
+  extraExits.forEach((t) => {
+    const d = parseTime(t);
+    if (d) allExits.push(d);
+  });
+  if (finalOutDate) {
+    allExits.push(finalOutDate);
+  } else if (calculatedFinalOutDate) {
+    allExits.push(calculatedFinalOutDate);
+  }
+
+  allEntrances.sort((a, b) => a.getTime() - b.getTime());
+  allExits.sort((a, b) => a.getTime() - b.getTime());
+
+  let totalWorkedMins = 0;
+  for (let i = 0; i < allEntrances.length && i < allExits.length; i++) {
+    totalWorkedMins += diffMinutes(allEntrances[i], allExits[i]);
+  }
+
+  let lunchPauseMins = 30;
+  if (lunchOutDate && lunchInDate) {
+    const actualLunchPause = diffMinutes(lunchOutDate, lunchInDate);
+    lunchPauseMins = actualLunchPause < 30 ? 30 : actualLunchPause;
+  }
+
+  // Non sottraiamo più la pausa pranzo nel debito/credito
+  const effectiveWorkMins = totalWorkedMins;
+
+  let creditMins = 0;
+  let debtMins = 0;
+
+  if (morningInDate && (finalOutDate || calculatedFinalOutDate || allExits.length > 0)) {
+    if (effectiveWorkMins < WORK_DURATION_MIN + lunchPauseMins) {
+      debtMins = WORK_DURATION_MIN + lunchPauseMins - effectiveWorkMins;
+    } else {
+      creditMins = effectiveWorkMins - (WORK_DURATION_MIN + lunchPauseMins);
     }
+  }
 
-    timesEntrances.sort((a, b) => a.getTime() - b.getTime());
-    timesExits.sort((a, b) => a.getTime() - b.getTime());
+  const totalWorkedHours = Math.floor(totalWorkedMins / 60);
+  const totalWorkedMinutes = Math.round(totalWorkedMins % 60);
 
-    if (timesExits.length > 0 && timesEntrances.length !== timesExits.length) {
-      setError("Numero di orari di entrata e uscita non corrispondono");
-      setCalculatedFinalOut("");
-      return;
-    }
-    for (let i = 0; i < timesEntrances.length && i < timesExits.length; i++) {
-      if (timesEntrances[i].getTime() >= timesExits[i].getTime()) {
-        setError(
-          `L'orario di entrata #${i + 1} deve essere precedente all'uscita corrispondente`,
-        );
-        setCalculatedFinalOut("");
-        return;
-      }
-    }
+  const debtHours = Math.floor(debtMins / 60);
+  const debtMinutes = Math.round(debtMins % 60);
 
-    let lunchPauseMins = 30;
-    if (lunchOutDate && lunchInDate) {
-      const actualLunchPause = diffMinutes(lunchOutDate, lunchInDate);
-      lunchPauseMins = actualLunchPause < 30 ? 30 : actualLunchPause;
-    }
+  const creditHours = Math.floor(creditMins / 60);
+  const creditMinutes = Math.round(creditMins % 60);
 
-    let totalWorkedMins = 0;
-    for (let i = 0; i < timesEntrances.length && i < timesExits.length; i++) {
-      totalWorkedMins += diffMinutes(timesEntrances[i], timesExits[i]);
-    }
-
-    // Non sottraiamo più la pausa pranzo nel debito/credito
-    const effectiveWorkMins = totalWorkedMins;
-
-    let creditMins = 0;
-    let debtMins = 0;
-
-    if (morningInDate && (finalOutDate || calcFinalOutDate || timesExits.length > 0)) {
-      if (effectiveWorkMins < WORK_DURATION_MIN + lunchPauseMins) {
-        debtMins = WORK_DURATION_MIN + lunchPauseMins - effectiveWorkMins;
-      } else {
-        creditMins = effectiveWorkMins - (WORK_DURATION_MIN + lunchPauseMins);
-      }
-    }
-
-    const totalWorkedHours = Math.floor(totalWorkedMins / 60);
-    const totalWorkedMinutes = Math.round(totalWorkedMins % 60);
-
-    const debtHours = Math.floor(debtMins / 60);
-    const debtMinutes = Math.round(debtMins % 60);
-
-    const creditHours = Math.floor(creditMins / 60);
-    const creditMinutes = Math.round(creditMins % 60);
-
-    const showStats =
-      morningInDate &&
-      (finalOutDate || calcFinalOutDate || timesExits.length > 0);
+  const showStats =
+    morningInDate &&
+    (finalOutDate || calculatedFinalOutDate || allExits.length > 0);
 
   return (
     <div className="max-w-md mx-auto p-6 bg-white rounded-md shadow-md">
