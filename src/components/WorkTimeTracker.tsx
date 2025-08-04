@@ -220,16 +220,30 @@ const WorkTimeTracker = () => {
 
   const extraLunchPause = lunchPauseMins > 30 ? lunchPauseMins - 30 : 0;
 
-  // Calcolo debito e credito giornaliero
-  const debtMins = totalWorkedMins < WORK_DURATION_MIN ? WORK_DURATION_MIN - totalWorkedMins : 0;
+  // Calcolo debito e credito considerando il debito pausa e il tempo extra lavorato
+  let remainingLunchDebt = extraLunchPause;
+  let creditMins = 0;
+  let debtMins = 0;
+
+  if (totalWorkedMins < WORK_DURATION_MIN) {
+    // Debito giornaliero se ore lavorate inferiori a 7h12m
+    debtMins = WORK_DURATION_MIN - totalWorkedMins + remainingLunchDebt;
+    remainingLunchDebt = 0; // Debito pausa sommato al debito giornaliero
+  } else {
+    // Se ho lavorato di più, uso il tempo extra per scalare il debito pausa
+    const extraTime = totalWorkedMins - WORK_DURATION_MIN;
+    if (extraTime >= remainingLunchDebt) {
+      creditMins = extraTime - remainingLunchDebt;
+      remainingLunchDebt = 0;
+    } else {
+      remainingLunchDebt = remainingLunchDebt - extraTime;
+      creditMins = 0;
+    }
+  }
+
   const debtHours = Math.floor(debtMins / 60);
   const debtMinutes = Math.round(debtMins % 60);
 
-  // Credito solo se non c'è debito pausa extra
-  const creditMins =
-    totalWorkedMins > WORK_DURATION_MIN && extraLunchPause === 0
-      ? totalWorkedMins - WORK_DURATION_MIN
-      : 0;
   const creditHours = Math.floor(creditMins / 60);
   const creditMinutes = Math.round(creditMins % 60);
 
@@ -328,9 +342,9 @@ const WorkTimeTracker = () => {
           <p>
             Pausa pranzo conteggiata: <strong>{lunchPauseMins} minuti</strong>
           </p>
-          {extraLunchPause > 0 && (
+          {remainingLunchDebt > 0 && (
             <p className="text-red-600">
-              Minuti pausa extra da recuperare: <strong>{extraLunchPause}</strong>
+              Minuti pausa extra da recuperare: <strong>{remainingLunchDebt}</strong>
             </p>
           )}
           {debtMins > 0 && (
