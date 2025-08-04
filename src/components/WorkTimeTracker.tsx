@@ -126,6 +126,7 @@ const WorkTimeTracker = () => {
 
     const extraRecovery = lunchPauseMins > 30 ? lunchPauseMins - 30 : 0;
 
+    // Calcolo orario di uscita previsto includendo il debito pausa extra da recuperare
     const finalOutMins =
       toMinutes(morningInDate) + WORK_DURATION_MIN + LUNCH_MIN + extraRecovery;
 
@@ -181,11 +182,11 @@ const WorkTimeTracker = () => {
       return;
     }
 
-    if (!lunchOutDate || !lunchInDate) {
-      setInfo(
-        "Non è stata inserita la pausa pranzo, verranno conteggiati 30 minuti di pausa comunque",
-      );
-    }
+    setInfo(
+      !lunchOutDate || !lunchInDate
+        ? "Non è stata inserita la pausa pranzo, verranno conteggiati 30 minuti di pausa comunque"
+        : null,
+    );
 
     setCalculatedFinalOut(formatTime(fromMinutes(finalOutMins)));
   }, [morningIn, lunchOut, lunchIn]);
@@ -343,11 +344,7 @@ const WorkTimeTracker = () => {
           <p>
             Pausa pranzo conteggiata: <strong>{lunchPauseMins} minuti</strong>
           </p>
-          {remainingLunchDebt > 0 && (
-            <p className="text-red-600">
-              Minuti pausa extra da recuperare: <strong>{remainingLunchDebt}</strong>
-            </p>
-          )}
+          {/* Rimuovo la visualizzazione del debito pausa extra perché è già incluso */}
           {debtMins > 0 && (
             <p className="text-red-700 font-semibold">
               Debito giornaliero: {debtHours}h {debtMinutes}m
