@@ -247,6 +247,18 @@ const WorkTimeTracker = () => {
   const creditHours = Math.floor(creditMins / 60);
   const creditMinutes = Math.round(creditMins % 60);
 
+  // Calcolo orario di uscita necessario per recuperare il debito totale
+  let exitToRecoverDebt: string | null = null;
+  if (morningInDate && (debtMins > 0 || remainingLunchDebt > 0)) {
+    const totalDebt = debtMins + remainingLunchDebt;
+    const exitTime = new Date(morningInDate.getTime() + (totalDebt + WORK_DURATION_MIN + LUNCH_MIN) * 60000);
+    if (toMinutes(exitTime) <= OFFICE_CLOSE) {
+      exitToRecoverDebt = formatTime(exitTime);
+    } else {
+      exitToRecoverDebt = "Oltre orario chiusura ufficio";
+    }
+  }
+
   return (
     <div className="max-w-md mx-auto p-6 bg-white rounded-md shadow-md">
       <h2 className="text-2xl font-semibold mb-4 text-center">
@@ -355,6 +367,11 @@ const WorkTimeTracker = () => {
           {creditMins > 0 && (
             <p className="text-green-700 font-semibold">
               Credito giornaliero: {creditHours}h {creditMinutes}m
+            </p>
+          )}
+          {exitToRecoverDebt && (
+            <p className="mt-4 text-blue-700 font-semibold">
+              Orario di uscita per recuperare debito: <strong>{exitToRecoverDebt}</strong>
             </p>
           )}
         </div>
