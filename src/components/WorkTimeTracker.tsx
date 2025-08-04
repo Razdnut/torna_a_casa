@@ -57,6 +57,11 @@ const WorkTimeTracker = () => {
   const [finalOut, setFinalOut] = useState<TimeString>("");
   const [pauseNoExit, setPauseNoExit] = useState(false);
 
+  // Nuovi stati per permessi
+  const [usedPermit, setUsedPermit] = useState(false);
+  const [permitOut, setPermitOut] = useState<TimeString>("");
+  const [permitIn, setPermitIn] = useState<TimeString>("");
+
   const [calculated, setCalculated] = useState<{
     total: number;
     debt: number;
@@ -312,6 +317,46 @@ const WorkTimeTracker = () => {
             Pausa pranzo senza uscita
           </label>
         </div>
+        <div className="flex items-center space-x-2 mt-2">
+          <Checkbox
+            id="usedPermit"
+            checked={usedPermit}
+            onCheckedChange={(checked) => setUsedPermit(!!checked)}
+          />
+          <label htmlFor="usedPermit" className="text-sm font-medium">
+            Hai usato permessi?
+          </label>
+        </div>
+        {usedPermit && (
+          <div className="space-y-2 mt-2">
+            <div>
+              <label htmlFor="permitOut" className="block font-medium mb-1">
+                Orario uscita permesso
+              </label>
+              <Input
+                id="permitOut"
+                type="time"
+                value={permitOut}
+                onChange={(e) => setPermitOut(e.target.value)}
+                min="07:30"
+                max="19:00"
+              />
+            </div>
+            <div>
+              <label htmlFor="permitIn" className="block font-medium mb-1">
+                Orario ingresso permesso
+              </label>
+              <Input
+                id="permitIn"
+                type="time"
+                value={permitIn}
+                onChange={(e) => setPermitIn(e.target.value)}
+                min="07:30"
+                max="19:00"
+              />
+            </div>
+          </div>
+        )}
       </form>
 
       {/* Durata pausa pranzo */}
