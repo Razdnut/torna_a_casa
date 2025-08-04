@@ -336,7 +336,6 @@ const WorkTimeTracker = () => {
   const creditHours = Math.floor(creditMins / 60);
   const creditMinutes = Math.round(creditMins % 60);
 
-  // Modifico la condizione per mostrare le statistiche
   const showStats =
     morningInDate &&
     (finalOutDate || calculatedFinalOutDate || allExits.length > 0);
@@ -486,7 +485,11 @@ const WorkTimeTracker = () => {
       )}
 
       {showStats && (
-        <div className="mt-4">
+        <div className="mt-4 space-y-2">
+          <p className="text-sm text-gray-600">
+            Orario presunto di uscita per 7h12m di lavoro:{" "}
+            <strong>{calculatedFinalOut}</strong>
+          </p>
           <p>
             Ore lavorate (escluse pausa):{" "}
             <strong>
