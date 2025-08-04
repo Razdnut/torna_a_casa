@@ -65,6 +65,7 @@ const WorkTimeTracker = () => {
   const [extraExits, setExtraExits] = useState<TimeString[]>([]);
 
   const [calculatedFinalOut, setCalculatedFinalOut] = useState<TimeString>("");
+  const [showCalculatedOut, setShowCalculatedOut] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [info, setInfo] = useState<string | null>(null);
 
@@ -73,6 +74,7 @@ const WorkTimeTracker = () => {
     const morningInDate = parseTime(morningIn);
     if (!morningInDate) {
       setError("Inserire un orario di ingresso mattina valido");
+      setShowCalculatedOut(false);
       return;
     }
     const lunchOutDate = parseTime(lunchOut);
@@ -92,16 +94,19 @@ const WorkTimeTracker = () => {
       setError(
         "L'orario di uscita previsto supera l'orario di chiusura dell'ufficio (19:00)",
       );
+      setShowCalculatedOut(false);
       return;
     }
 
     setError(null);
     setCalculatedFinalOut(formatTime(fromMinutes(predictedFinalOutMins)));
+    setShowCalculatedOut(true);
   };
 
   useEffect(() => {
     setError(null);
     setInfo(null);
+    setShowCalculatedOut(false);
 
     const morningInDate = parseTime(morningIn);
     if (!morningInDate) {
@@ -189,12 +194,12 @@ const WorkTimeTracker = () => {
     });
 
     const finalOutDate = parseTime(finalOut);
-    const calcFinalOutDate = calculatedFinalOut ? parseTime(calculatedFinalOut) : null;
+    const calculatedFinalOutDate = calculatedFinalOut ? parseTime(calculatedFinalOut) : null;
 
     if (finalOutDate) {
       timesExits.push(finalOutDate);
-    } else if (calcFinalOutDate) {
-      timesExits.push(calcFinalOutDate);
+    } else if (calculatedFinalOutDate) {
+      timesExits.push(calculatedFinalOutDate);
     }
 
     timesEntrances.sort((a, b) => a.getTime() - b.getTime());
@@ -221,145 +226,37 @@ const WorkTimeTracker = () => {
       lunchPauseMins = actualLunchPause < 30 ? 30 : actualLunchPause;
     }
 
-    let workBy1412 = 0;
-    const limitTime = LATEST_3H36M_TIME;
-
+    let totalWorkedMins = 0;
     for (let i = 0; i < timesEntrances.length && i < timesExits.length; i++) {
-      const startMins = toMinutes(timesEntrances[i]);
-      const endMins = toMinutes(timesExits[i]);
-      if (endMins <= limitTime) {
-        workBy1412 += endMins - startMins;
-      } else if (startMins < limitTime) {
-        workBy1412 += limitTime - startMins;
+      totalWorkedMins += diffMinutes(timesEntrances[i], timesExits[i]);
+    }
+
+    // Non sottraiamo più la pausa pranzo nel debito/credito
+    const effectiveWorkMins = totalWorkedMins;
+
+    let creditMins = 0;
+    let debtMins = 0;
+
+    if (morningInDate && (finalOutDate || calculatedFinalOutDate || timesExits.length > 0)) {
+      if (effectiveWorkMins < WORK_DURATION_MIN + lunchPauseMins) {
+        debtMins = WORK_DURATION_MIN + lunchPauseMins - effectiveWorkMins;
+      } else {
+        creditMins = effectiveWorkMins - (WORK_DURATION_MIN + lunchPauseMins);
       }
     }
 
-    if (workBy1412 < MIN_WORK_MIN) {
-      setError(
-        "Le 3h36m obbligatorie devono essere completate entro le 14:12",
-      );
-      setCalculatedFinalOut("");
-      return;
-    }
+    const totalWorkedHours = Math.floor(totalWorkedMins / 60);
+    const totalWorkedMinutes = Math.round(totalWorkedMins % 60);
 
-    if (lunchOutDate && lunchInDate) {
-      const workedBeforeLunch = diffMinutes(morningInDate, lunchOutDate);
-      const workedAfterLunch = (calcFinalOutDate ? toMinutes(calcFinalOutDate) : 0) - toMinutes(lunchInDate);
-      const totalWork = workedBeforeLunch + workedAfterLunch;
+    const debtHours = Math.floor(debtMins / 60);
+    const debtMinutes = Math.round(debtMins % 60);
 
-      if (totalWork < MIN_WORK_FOR_LUNCH) {
-        setError(
-          "La pausa pranzo può essere fatta solo se si svolgono almeno 6 ore di lavoro",
-        );
-        setCalculatedFinalOut("");
-        return;
-      }
-    }
+    const creditHours = Math.floor(creditMins / 60);
+    const creditMinutes = Math.round(creditMins % 60);
 
-    setInfo(
-      !lunchOutDate || !lunchInDate
-        ? "Non è stata inserita la pausa pranzo, verranno conteggiati 30 minuti di pausa comunque"
-        : null,
-    );
-
-    // Non calcoliamo più automaticamente qui il calculatedFinalOut
-    // Lo calcoliamo solo quando l'utente clicca il pulsante
-  }, [morningIn, lunchOut, lunchIn, finalOut, extraEntrances, extraExits, calculatedFinalOut]);
-
-  const addExtraEntrance = () => {
-    setExtraEntrances((prev) => [...prev, ""]);
-  };
-  const addExtraExit = () => {
-    setExtraExits((prev) => [...prev, ""]);
-  };
-  const updateExtraEntrance = (index: number, value: TimeString) => {
-    setExtraEntrances((prev) => {
-      const copy = [...prev];
-      copy[index] = value;
-      return copy;
-    });
-  };
-  const updateExtraExit = (index: number, value: TimeString) => {
-    setExtraExits((prev) => {
-      const copy = [...prev];
-      copy[index] = value;
-      return copy;
-    });
-  };
-  const removeExtraEntrance = (index: number) => {
-    setExtraEntrances((prev) => prev.filter((_, i) => i !== index));
-  };
-  const removeExtraExit = (index: number) => {
-    setExtraExits((prev) => prev.filter((_, i) => i !== index));
-  };
-
-  const morningInDate = parseTime(morningIn);
-  const lunchOutDate = parseTime(lunchOut);
-  const lunchInDate = parseTime(lunchIn);
-  const finalOutDate = parseTime(finalOut);
-  const calculatedFinalOutDate = calculatedFinalOut ? parseTime(calculatedFinalOut) : null;
-
-  const allEntrances: Date[] = [];
-  const allExits: Date[] = [];
-
-  if (morningInDate) allEntrances.push(morningInDate);
-  extraEntrances.forEach((t) => {
-    const d = parseTime(t);
-    if (d) allEntrances.push(d);
-  });
-  if (lunchInDate) allEntrances.push(lunchInDate);
-
-  if (lunchOutDate) allExits.push(lunchOutDate);
-  extraExits.forEach((t) => {
-    const d = parseTime(t);
-    if (d) allExits.push(d);
-  });
-  if (finalOutDate) {
-    allExits.push(finalOutDate);
-  } else if (calculatedFinalOutDate) {
-    allExits.push(calculatedFinalOutDate);
-  }
-
-  allEntrances.sort((a, b) => a.getTime() - b.getTime());
-  allExits.sort((a, b) => a.getTime() - b.getTime());
-
-  let totalWorkedMins = 0;
-  for (let i = 0; i < allEntrances.length && i < allExits.length; i++) {
-    totalWorkedMins += diffMinutes(allEntrances[i], allExits[i]);
-  }
-
-  let lunchPauseMins = 30;
-  if (lunchOutDate && lunchInDate) {
-    const actualLunchPause = diffMinutes(lunchOutDate, lunchInDate);
-    lunchPauseMins = actualLunchPause < 30 ? 30 : actualLunchPause;
-  }
-
-  // Non sottraiamo più la pausa pranzo nel debito/credito
-  const effectiveWorkMins = totalWorkedMins;
-
-  let creditMins = 0;
-  let debtMins = 0;
-
-  if (morningInDate && (finalOutDate || calculatedFinalOutDate || allExits.length > 0)) {
-    if (effectiveWorkMins < WORK_DURATION_MIN + lunchPauseMins) {
-      debtMins = WORK_DURATION_MIN + lunchPauseMins - effectiveWorkMins;
-    } else {
-      creditMins = effectiveWorkMins - (WORK_DURATION_MIN + lunchPauseMins);
-    }
-  }
-
-  const totalWorkedHours = Math.floor(totalWorkedMins / 60);
-  const totalWorkedMinutes = Math.round(totalWorkedMins % 60);
-
-  const debtHours = Math.floor(debtMins / 60);
-  const debtMinutes = Math.round(debtMins % 60);
-
-  const creditHours = Math.floor(creditMins / 60);
-  const creditMinutes = Math.round(creditMins % 60);
-
-  const showStats =
-    morningInDate &&
-    (finalOutDate || calculatedFinalOutDate || allExits.length > 0);
+    const showStats =
+      morningInDate &&
+      (finalOutDate || calculatedFinalOutDate || timesExits.length > 0);
 
   return (
     <div className="max-w-md mx-auto p-6 bg-white rounded-md shadow-md">
@@ -511,10 +408,10 @@ const WorkTimeTracker = () => {
         <div className="mt-4 p-3 bg-yellow-100 text-yellow-700 rounded">{info}</div>
       )}
 
-      {showStats && (
+      {showStats && showCalculatedOut && (
         <div className="mt-4 space-y-2">
           {calculatedFinalOut && (
-            <p className="text-sm text-gray-600">
+            <p className="text-sm font-bold bg-green-100 p-2 rounded">
               Orario presunto di uscita per 7h12m di lavoro:{" "}
               <strong>{calculatedFinalOut}</strong>
             </p>
