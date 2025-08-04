@@ -486,10 +486,12 @@ const WorkTimeTracker = () => {
 
       {showStats && (
         <div className="mt-4 space-y-2">
-          <p className="text-sm text-gray-600">
-            Orario presunto di uscita per 7h12m di lavoro:{" "}
-            <strong>{calculatedFinalOut}</strong>
-          </p>
+          {calculatedFinalOut && (
+            <p className="text-sm text-gray-600">
+              Orario presunto di uscita per 7h12m di lavoro:{" "}
+              <strong>{calculatedFinalOut}</strong>
+            </p>
+          )}
           <p>
             Ore lavorate (escluse pausa):{" "}
             <strong>
