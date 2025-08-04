@@ -154,6 +154,17 @@ const WorkTimeTracker = () => {
       credit = effectiveWorkMins - (WORK_DURATION_MIN + lunchPauseMins);
     }
 
+    // FIX: Se l'utente ha inserito Uscita Finale e il tempo lavorato effettivo copre anche il debito da pausa lunga, azzera il debito
+    if (finalOutDate) {
+      // Calcola il debito dovuto solo alla pausa lunga (oltre i 30 min)
+      const extraLunch = lunchPauseMins > 30 ? lunchPauseMins - 30 : 0;
+      // Il tempo richiesto totale è WORK_DURATION_MIN + LUNCH_MIN + extraLunch
+      const requiredMins = WORK_DURATION_MIN + LUNCH_MIN + extraLunch;
+      if (effectiveWorkMins >= requiredMins) {
+        debt = 0;
+      }
+    }
+
     setDebtMins(debt);
     setCreditMins(credit);
   };
