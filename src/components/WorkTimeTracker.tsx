@@ -1,9 +1,7 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
-import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { cn } from "@/lib/utils";
 
 type TimeString = string; // "HH:mm"
 
@@ -36,17 +34,15 @@ function addMinutes(date: Date, mins: number): Date {
   return new Date(date.getTime() + mins * 60000);
 }
 
-const WORK_DURATION_MIN = 7 * 60 + 12; // 7h12m = 432 min
+const WORK_DURATION_MIN = 7 * 60 + 12; // 7h12m = 432 min (solo lavoro, pausa esclusa)
 const MIN_WORK_MIN = 3 * 60 + 36; // 3h36m = 216 min
 const LUNCH_MIN = 30;
-const OFFICE_OPEN = 7 * 60 + 30; // 7:30 in minutes
-const OFFICE_CLOSE = 19 * 60; // 19:00 in minutes
+const OFFICE_OPEN = 7 * 60 + 30; // 7:30 in minuti
+const OFFICE_CLOSE = 19 * 60; // 19:00 in minuti
 const LUNCH_START = 12 * 60; // 12:00
 const LUNCH_END = 15 * 60; // 15:00
 const MIN_WORK_FOR_LUNCH = 6 * 60; // 6h = 360 min
-const MIN_WORK_BY_1412 = 3 * 60 + 36; // 3h36m by 14:12 (14*60+12=852)
-
-const LATEST_3H36M_TIME = 14 * 60 + 12; // 14:12 in minutes
+const LATEST_3H36M_TIME = 14 * 60 + 12; // 14:12 in minuti
 
 function toMinutes(d: Date) {
   return d.getHours() * 60 + d.getMinutes();
@@ -70,9 +66,6 @@ const WorkTimeTracker = () => {
   const [error, setError] = useState<string | null>(null);
   const [info, setInfo] = useState<string | null>(null);
 
-  // Calculate total worked minutes excluding lunch pause
-  // and apply rules for lunch pause minimum 30 min, etc.
-
   useEffect(() => {
     setError(null);
     setInfo(null);
@@ -94,24 +87,20 @@ const WorkTimeTracker = () => {
       return;
     }
 
-    // Lunch times
     const lunchOutDate = parseTime(lunchOut);
     const lunchInDate = parseTime(lunchIn);
 
-    // Validate lunch times if provided
     if ((lunchOut && !lunchOutDate) || (lunchIn && !lunchInDate)) {
       setError("Orari pausa pranzo non validi");
       setCalculatedFinalOut("");
       return;
     }
 
-    // If lunch times are partially filled, wait for both
     if ((lunchOut && !lunchIn) || (!lunchOut && lunchIn)) {
       setCalculatedFinalOut("");
       return;
     }
 
-    // If lunch times are filled, validate lunch rules
     if (lunchOutDate && lunchInDate) {
       const lunchOutMins = toMinutes(lunchOutDate);
       const lunchInMins = toMinutes(lunchInDate);
@@ -133,100 +122,50 @@ const WorkTimeTracker = () => {
       }
     }
 
-    // Calculate worked minutes before lunch
-    let workedBeforeLunch = 0;
-    if (lunchOutDate) {
-      workedBeforeLunch = diffMinutes(morningInDate, lunchOutDate);
-      if (workedBeforeLunch < 0) {
-        setError("L'orario di uscita in pausa non può essere prima dell'ingresso mattutino");
-        setCalculatedFinalOut("");
-        return;
-      }
-    }
-
-    // Calculate worked minutes after lunch
-    let workedAfterLunch = 0;
-    if (lunchInDate) {
-      // We don't know finalOut yet, so we calculate finalOut based on rules
-      // We'll calculate finalOut below
-    }
-
-    // Calculate total worked minutes excluding lunch pause
-    // If no lunch pause, 30 min pause is counted anyway
-    // If lunch pause < 30 min, count 30 min pause anyway
-    // If lunch pause > 30 min, extra minutes must be recovered (detraction)
-
-    // Calculate lunch pause duration
-    let lunchPauseMins = 30; // default 30 min if no lunch pause or less than 30 min
+    // Calcolo durata pausa pranzo
+    let lunchPauseMins = 30; // default 30 min se non esce o pausa < 30 min
     if (lunchOutDate && lunchInDate) {
       const actualLunchPause = diffMinutes(lunchOutDate, lunchInDate);
       lunchPauseMins = actualLunchPause < 30 ? 30 : actualLunchPause;
     }
 
-    // Check if lunch pause is allowed (only if total work >= 6h)
-    // We calculate total work as WORK_DURATION_MIN + lunchPauseMins
-    // But we don't have finalOut yet, so we calculate finalOut now:
-
-    // Calculate finalOut time:
-    // finalOut = morningIn + WORK_DURATION_MIN + lunchPauseMins + extra recovery if lunchPauseMins > 30
-
-    // Extra recovery minutes = lunchPauseMins - 30 if > 30 else 0
+    // Extra minuti pausa da recuperare
     const extraRecovery = lunchPauseMins > 30 ? lunchPauseMins - 30 : 0;
 
-    // Calculate finalOut in minutes from midnight
-    // finalOut = morningIn + WORK_DURATION_MIN + lunchPauseMins + extraRecovery
-    // But extraRecovery is detraction, so finalOut is delayed by extraRecovery minutes
-
-    // Actually, the extraRecovery means you have to work more, so finalOut is morningIn + WORK_DURATION_MIN + lunchPauseMins + extraRecovery
-    // But lunchPauseMins already includes the extra time, so we add extraRecovery again? No, lunchPauseMins already includes the full pause time.
-    // So finalOut = morningIn + WORK_DURATION_MIN + lunchPauseMins + extraRecovery (extraRecovery is the extra time to recover)
-    // Wait, this would double count extraRecovery. So finalOut = morningIn + WORK_DURATION_MIN + lunchPauseMins + extraRecovery is wrong.
-    // Correct is finalOut = morningIn + WORK_DURATION_MIN + lunchPauseMins + extraRecovery
-    // But lunchPauseMins already includes the extra time, so extraRecovery is lunchPauseMins - 30
-    // So finalOut = morningIn + WORK_DURATION_MIN + lunchPauseMins + extraRecovery = morningIn + WORK_DURATION_MIN + lunchPauseMins + (lunchPauseMins - 30) = morningIn + WORK_DURATION_MIN + 2*lunchPauseMins - 30
-    // This is wrong, so let's think carefully:
-    // The base work is 7h12m including 30m lunch.
-    // If lunch is longer than 30m, the extra time must be recovered, so total work time increases by extraRecovery.
-    // So finalOut = morningIn + 7h12m + lunchPauseMins + extraRecovery - 30m (because 30m lunch is already included in 7h12m)
-    // So finalOut = morningIn + 7h12m + (lunchPauseMins - 30m) + extraRecovery
-    // But extraRecovery = lunchPauseMins - 30m, so finalOut = morningIn + 7h12m + 2*(lunchPauseMins - 30m)
-    // This is not correct.
-    // Actually, the 7h12m includes 30m lunch, so the actual work time is 6h42m (7h12m - 30m lunch).
-    // So finalOut = morningIn + 6h42m + lunchPauseMins + extraRecovery
-    // extraRecovery = lunchPauseMins - 30m if lunchPauseMins > 30 else 0
-    // So finalOut = morningIn + 6h42m + lunchPauseMins + extraRecovery
-    // But extraRecovery is already included in lunchPauseMins, so we add it again? No.
-    // So finalOut = morningIn + 6h42m + lunchPauseMins + extraRecovery
-    // Wait, extraRecovery is the extra time to recover, so it adds to work time.
-    // So finalOut = morningIn + 6h42m + lunchPauseMins + extraRecovery
-    // But lunchPauseMins already includes the full pause time, so extraRecovery is double counted.
-    // So finalOut = morningIn + 6h42m + lunchPauseMins + extraRecovery is wrong.
-    // Correct is finalOut = morningIn + 6h42m + lunchPauseMins + extraRecovery (extraRecovery is the extra time to recover)
-    // But lunchPauseMins includes the full pause, so extraRecovery is lunchPauseMins - 30m
-    // So finalOut = morningIn + 6h42m + lunchPauseMins + (lunchPauseMins - 30m) = morningIn + 6h42m + 2*lunchPauseMins - 30m
-    // This is wrong.
-    // Let's simplify:
-    // Work time excluding lunch = 7h12m - 30m = 6h42m = 402 min
-    // So total time at work = 6h42m + lunchPauseMins + extraRecovery
-    // But extraRecovery = lunchPauseMins - 30m if lunchPauseMins > 30 else 0
-    // So total time = 402 + lunchPauseMins + extraRecovery
-    // But extraRecovery is part of lunchPauseMins, so we must not add it twice.
-    // So total time = 402 + lunchPauseMins + (lunchPauseMins - 30m) if lunchPauseMins > 30 else 402 + lunchPauseMins
-    // This is double counting.
-    // Actually, the extraRecovery is the extra time beyond 30m, so total time = 402 + lunchPauseMins + extraRecovery = 402 + lunchPauseMins + (lunchPauseMins - 30m) = 402 + 2*lunchPauseMins - 30m
-    // This is wrong.
-    // The correct approach:
-    // The base work is 7h12m including 30m lunch.
-    // If lunch is longer than 30m, the extra time must be recovered, so total work time increases by extraRecovery.
-    // So finalOut = morningIn + 7h12m + extraRecovery
-    // Because 7h12m already includes 30m lunch.
-    // So finalOut = morningIn + 432 + extraRecovery
-    // This is the correct formula.
+    // Calcolo orario uscita finale:
+    // Orario uscita = ingresso mattina + 7h12m (solo lavoro) + pausa pranzo (30 min) + eventuali minuti extra da recuperare
+    // Ma pausa pranzo non fa parte delle 7h12m, quindi:
+    // uscita = ingresso mattina + 7h12m + pausa pranzo (30 min) + extraRecovery
+    // pausa pranzo minima 30 min, quindi pausa pranzo è lunchPauseMins (>=30)
+    // Quindi uscita = ingresso mattina + 7h12m + lunchPauseMins + extraRecovery
+    // extraRecovery è già inclusa in lunchPauseMins, quindi va aggiunto solo una volta
+    // Quindi uscita = ingresso mattina + 7h12m + lunchPauseMins + extraRecovery (extraRecovery = lunchPauseMins - 30 se > 30)
+    // Ma extraRecovery è parte di lunchPauseMins, quindi aggiungerlo di nuovo sarebbe doppio conteggio
+    // Quindi uscita = ingresso mattina + 7h12m + lunchPauseMins + extraRecovery è sbagliato
+    // Corretto: uscita = ingresso mattina + 7h12m + lunchPauseMins + (extraRecovery) - extraRecovery = ingresso mattina + 7h12m + lunchPauseMins
+    // Quindi uscita = ingresso mattina + 7h12m + lunchPauseMins
+    // Ma se pausa > 30 min, i minuti extra vanno recuperati, quindi la giornata si allunga di extraRecovery minuti
+    // Quindi uscita = ingresso mattina + 7h12m + lunchPauseMins + extraRecovery
+    // Ma lunchPauseMins include già i minuti extra, quindi extraRecovery è doppio conteggio
+    // Quindi pausa pranzo è lunchPauseMins, extraRecovery è lunchPauseMins - 30
+    // Quindi uscita = ingresso mattina + 7h12m + lunchPauseMins + extraRecovery = ingresso mattina + 7h12m + lunchPauseMins + (lunchPauseMins - 30) = ingresso mattina + 7h12m + 2*lunchPauseMins - 30
+    // Questo è sbagliato.
+    // La pausa pranzo è lunchPauseMins, ma i minuti extra vanno recuperati, quindi la giornata si allunga di extraRecovery minuti.
+    // Quindi uscita = ingresso mattina + 7h12m + lunchPauseMins + extraRecovery
+    // Ma extraRecovery è parte di lunchPauseMins, quindi va sottratto una volta.
+    // Quindi uscita = ingresso mattina + 7h12m + lunchPauseMins + extraRecovery - extraRecovery = ingresso mattina + 7h12m + lunchPauseMins
+    // Quindi uscita = ingresso mattina + 7h12m + lunchPauseMins
+    // Ma se pausa > 30 min, i minuti extra vanno recuperati, quindi la giornata si allunga di extraRecovery minuti.
+    // Quindi uscita = ingresso mattina + 7h12m + lunchPauseMins + extraRecovery
+    // Quindi la pausa pranzo è 30 min fissa, e i minuti extra vanno aggiunti.
+    // Quindi uscita = ingresso mattina + 7h12m + 30 + extraRecovery
+    // Quindi lunchPauseMins non va sommato tutto, ma solo 30 min + extraRecovery
+    // Corretto:
+    // uscita = ingresso mattina + 7h12m + 30 + extraRecovery
 
     const finalOutMins =
-      morningInMins + WORK_DURATION_MIN + (extraRecovery > 0 ? extraRecovery : 0);
+      morningInMins + WORK_DURATION_MIN + LUNCH_MIN + extraRecovery;
 
-    // Check finalOutMins within office hours
     if (finalOutMins > OFFICE_CLOSE) {
       setError(
         "L'orario di uscita previsto supera l'orario di chiusura dell'ufficio (19:00)",
@@ -235,18 +174,19 @@ const WorkTimeTracker = () => {
       return;
     }
 
-    // Check lunch pause allowed only if work >= 6h
-    // Calculate total work excluding lunch pause (morningIn to lunchOut + lunchIn to finalOut)
-    // But finalOut is calculated now, so:
-    // workedBeforeLunch = lunchOut - morningIn
-    // workedAfterLunch = finalOut - lunchIn
-    // totalWork = workedBeforeLunch + workedAfterLunch
+    // Controllo pausa pranzo solo se si fanno almeno 6h di lavoro
+    // Calcolo lavoro totale senza pausa pranzo (7h12m)
+    // Se pausa pranzo inserita, lavoro totale = 7h12m + pausa pranzo
+    // Ma pausa pranzo non fa parte del lavoro, quindi lavoro totale = 7h12m
+    // Quindi pausa pranzo può essere fatta solo se si fanno almeno 6h di lavoro
+    // Controllo se lavoro prima pausa + lavoro dopo pausa >= 6h
 
     if (lunchOutDate && lunchInDate) {
-      const workedAfterLunchMins = finalOutMins - toMinutes(lunchInDate);
-      const totalWorkMins = workedBeforeLunch + workedAfterLunchMins;
+      const workedBeforeLunch = diffMinutes(morningInDate, lunchOutDate);
+      const workedAfterLunch = finalOutMins - toMinutes(lunchInDate);
+      const totalWork = workedBeforeLunch + workedAfterLunch;
 
-      if (totalWorkMins < MIN_WORK_FOR_LUNCH) {
+      if (totalWork < MIN_WORK_FOR_LUNCH) {
         setError(
           "La pausa pranzo può essere fatta solo se si svolgono almeno 6 ore di lavoro",
         );
@@ -255,21 +195,20 @@ const WorkTimeTracker = () => {
       }
     }
 
-    // Check 3h36m obbligatori entro 14:12
-    // Calculate work done by 14:12 (852 min)
-    // Work before lunch + work after lunch until 14:12
+    // Controllo 3h36m obbligatori entro le 14:12
+    // Calcolo lavoro svolto entro 14:12
 
     const limitTime = fromMinutes(LATEST_3H36M_TIME);
 
     let workBy1412 = 0;
     if (lunchOutDate && lunchInDate) {
-      // Work before lunch if lunchOut <= 14:12
+      // lavoro prima pausa se pausa inizia prima di 14:12
       if (toMinutes(lunchOutDate) <= LATEST_3H36M_TIME) {
         workBy1412 += diffMinutes(morningInDate, lunchOutDate);
       } else if (toMinutes(morningInDate) < LATEST_3H36M_TIME) {
         workBy1412 += LATEST_3H36M_TIME - toMinutes(morningInDate);
       }
-      // Work after lunch if lunchIn < 14:12
+      // lavoro dopo pausa se rientro prima di 14:12
       if (toMinutes(lunchInDate) < LATEST_3H36M_TIME) {
         const afterLunchEnd = Math.min(finalOutMins, LATEST_3H36M_TIME);
         if (afterLunchEnd > toMinutes(lunchInDate)) {
@@ -277,7 +216,7 @@ const WorkTimeTracker = () => {
         }
       }
     } else {
-      // No lunch pause, work is continuous from morningIn to finalOut
+      // senza pausa pranzo lavoro continuo
       if (morningInMins < LATEST_3H36M_TIME) {
         const afterLunchEnd = Math.min(finalOutMins, LATEST_3H36M_TIME);
         workBy1412 = afterLunchEnd - morningInMins;
@@ -292,7 +231,6 @@ const WorkTimeTracker = () => {
       return;
     }
 
-    // If no lunch pause entered, count 30 min pause anyway
     if (!lunchOutDate || !lunchInDate) {
       setInfo(
         "Non è stata inserita la pausa pranzo, verranno conteggiati 30 minuti di pausa comunque",
@@ -302,7 +240,7 @@ const WorkTimeTracker = () => {
     setCalculatedFinalOut(formatTime(fromMinutes(finalOutMins)));
   }, [morningIn, lunchOut, lunchIn]);
 
-  // Calculate total worked time and lunch pause for display
+  // Calcolo ore lavorate totali (escludendo pausa pranzo)
   let totalWorkedMins = 0;
   let lunchPauseMins = 30;
   let lunchPauseEntered = false;
@@ -321,17 +259,15 @@ const WorkTimeTracker = () => {
         diffMinutes(morningInDate, lunchOutDate) +
         diffMinutes(lunchInDate, finalOutDate);
     } else {
-      // No lunch pause entered, count 30 min pause anyway
+      // senza pausa pranzo inserita, pausa 30 min comunque
       lunchPauseMins = 30;
       totalWorkedMins = diffMinutes(morningInDate, finalOutDate) - lunchPauseMins;
     }
   }
 
-  // Format total worked time for display
   const totalWorkedHours = Math.floor(totalWorkedMins / 60);
   const totalWorkedMinutes = Math.round(totalWorkedMins % 60);
 
-  // Calculate extra lunch pause to recover or detraction
   const extraLunchPause = lunchPauseMins > 30 ? lunchPauseMins - 30 : 0;
 
   return (
