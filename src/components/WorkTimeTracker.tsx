@@ -41,14 +41,11 @@ function fromMinutes(mins: number) {
 }
 
 const WORK_DURATION_MIN = 7 * 60 + 12; // 7h12m = 432 min (solo lavoro, pausa esclusa)
-const MIN_WORK_MIN = 3 * 60 + 36; // 3h36m = 216 min
 const LUNCH_MIN = 30;
 const OFFICE_OPEN = 7 * 60 + 30; // 7:30 in minuti
 const OFFICE_CLOSE = 19 * 60; // 19:00 in minuti
 const LUNCH_START = 12 * 60; // 12:00
 const LUNCH_END = 15 * 60; // 15:00
-const MIN_WORK_FOR_LUNCH = 6 * 60; // 6h = 360 min
-const LATEST_3H36M_TIME = 14 * 60 + 12; // 14:12 in minuti
 
 function toMinutes(d: Date) {
   return d.getHours() * 60 + d.getMinutes();
@@ -69,8 +66,15 @@ const WorkTimeTracker = () => {
   const [error, setError] = useState<string | null>(null);
   const [info, setInfo] = useState<string | null>(null);
 
+  // New states for debt/credit to update on button click
+  const [debtMins, setDebtMins] = useState(0);
+  const [creditMins, setCreditMins] = useState(0);
+
   // Function to calculate predicted final out time based on current inputs
   const calculatePredictedFinalOut = () => {
+    setError(null);
+    setInfo(null);
+
     const morningInDate = parseTime(morningIn);
     if (!morningInDate) {
       setError("Inserire un orario di ingresso mattina valido");
@@ -98,15 +102,64 @@ const WorkTimeTracker = () => {
       return;
     }
 
-    setError(null);
     setCalculatedFinalOut(formatTime(fromMinutes(predictedFinalOutMins)));
     setShowCalculatedOut(true);
+
+    // Calcolo debito/credito basato su finalOut se presente, altrimenti su predictedFinalOut
+    const finalOutDate = parseTime(finalOut);
+    const allEntrances: Date[] = [];
+    const allExits: Date[] = [];
+
+    if (morningInDate) allEntrances.push(morningInDate);
+    extraEntrances.forEach((t) => {
+      const d = parseTime(t);
+      if (d) allEntrances.push(d);
+    });
+    if (lunchInDate) allEntrances.push(lunchInDate);
+
+    if (lunchOutDate) allExits.push(lunchOutDate);
+    extraExits.forEach((t) => {
+      const d = parseTime(t);
+      if (d) allExits.push(d);
+    });
+
+    if (finalOutDate) {
+      allExits.push(finalOutDate);
+    } else {
+      allExits.push(fromMinutes(predictedFinalOutMins));
+    }
+
+    allEntrances.sort((a, b) => a.getTime() - b.getTime());
+    allExits.sort((a, b) => a.getTime() - b.getTime());
+
+    let totalWorkedMins = 0;
+    for (let i = 0; i < allEntrances.length && i < allExits.length; i++) {
+      totalWorkedMins += diffMinutes(allEntrances[i], allExits[i]);
+    }
+
+    const effectiveWorkMins = totalWorkedMins;
+
+    let debt = 0;
+    let credit = 0;
+
+    if (effectiveWorkMins < WORK_DURATION_MIN + lunchPauseMins) {
+      debt = WORK_DURATION_MIN + lunchPauseMins - effectiveWorkMins;
+      // Sottraiamo i 30 minuti obbligatori di pausa pranzo dal debito
+      debt = Math.max(0, debt - 30);
+    } else {
+      credit = effectiveWorkMins - (WORK_DURATION_MIN + lunchPauseMins);
+    }
+
+    setDebtMins(debt);
+    setCreditMins(credit);
   };
 
   useEffect(() => {
     setError(null);
     setInfo(null);
     setShowCalculatedOut(false);
+    setDebtMins(0);
+    setCreditMins(0);
 
     const morningInDate = parseTime(morningIn);
     if (!morningInDate) {
@@ -238,28 +291,6 @@ const WorkTimeTracker = () => {
   let totalWorkedMins = 0;
   for (let i = 0; i < allEntrances.length && i < allExits.length; i++) {
     totalWorkedMins += diffMinutes(allEntrances[i], allExits[i]);
-  }
-
-  let lunchPauseMins = 30;
-  if (lunchOutDate && lunchInDate) {
-    const actualLunchPause = diffMinutes(lunchOutDate, lunchInDate);
-    lunchPauseMins = actualLunchPause < 30 ? 30 : actualLunchPause;
-  }
-
-  // Non sottraiamo più la pausa pranzo nel debito/credito
-  const effectiveWorkMins = totalWorkedMins;
-
-  let creditMins = 0;
-  let debtMins = 0;
-
-  if (morningInDate && (finalOutDate || calculatedFinalOutDate || allExits.length > 0)) {
-    if (effectiveWorkMins < WORK_DURATION_MIN + lunchPauseMins) {
-      debtMins = WORK_DURATION_MIN + lunchPauseMins - effectiveWorkMins;
-      // Sottraiamo i 30 minuti obbligatori di pausa pranzo dal debito
-      debtMins = Math.max(0, debtMins - 30);
-    } else {
-      creditMins = effectiveWorkMins - (WORK_DURATION_MIN + lunchPauseMins);
-    }
   }
 
   const totalWorkedHours = Math.floor(totalWorkedMins / 60);
@@ -425,7 +456,7 @@ const WorkTimeTracker = () => {
         <div className="mt-4 p-3 bg-yellow-100 text-yellow-700 rounded">{info}</div>
       )}
 
-      {showStats && showCalculatedOut && (
+      {showStats && (
         <div className="mt-4 space-y-2">
           {calculatedFinalOut && (
             <p className="text-sm font-bold bg-green-100 p-2 rounded">
