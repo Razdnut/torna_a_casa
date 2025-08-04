@@ -68,7 +68,6 @@ const WorkTimeTracker = () => {
   const [error, setError] = useState<string | null>(null);
   const [info, setInfo] = useState<string | null>(null);
 
-  // Validate and calculate final out and errors
   useEffect(() => {
     setError(null);
     setInfo(null);
@@ -141,45 +140,27 @@ const WorkTimeTracker = () => {
       }
     }
 
-    // Check that extra entrances and exits are in chronological order and paired
-    // We'll merge all times (morningIn, extraEntrances, lunchOut, lunchIn, extraExits, finalOut) in order
-    // but for finalOut we use calculatedFinalOut if finalOut not set
-
-    // For calculation, we consider intervals of work as pairs of entrance-exit times:
-    // morningIn, extraEntrances..., lunchOut, lunchIn, extraExits..., finalOut
-
-    // We'll build an array of all entrances and exits in chronological order
-    // Entrances: morningIn + extraEntrances + lunchIn
-    // Exits: lunchOut + extraExits + finalOut
-
     // Parse all times
     const timesEntrances: Date[] = [];
     const timesExits: Date[] = [];
 
-    // morningIn
     timesEntrances.push(morningInDate);
-
-    // extraEntrances
-    for (const t of extraEntrances) {
+    extraEntrances.forEach((t) => {
       const d = parseTime(t);
       if (d) timesEntrances.push(d);
-    }
-
-    // lunchIn
+    });
     if (lunchInDate) timesEntrances.push(lunchInDate);
 
-    // lunchOut
     if (lunchOutDate) timesExits.push(lunchOutDate);
-
-    // extraExits
-    for (const t of extraExits) {
+    extraExits.forEach((t) => {
       const d = parseTime(t);
       if (d) timesExits.push(d);
-    }
+    });
 
-    // finalOut
     const finalOutDate = parseTime(finalOut);
     const calcFinalOutDate = calculatedFinalOut ? parseTime(calculatedFinalOut) : null;
+
+    // Use finalOutDate if present, else fallback to calculatedFinalOutDate
     if (finalOutDate) {
       timesExits.push(finalOutDate);
     } else if (calcFinalOutDate) {
@@ -190,13 +171,13 @@ const WorkTimeTracker = () => {
     timesEntrances.sort((a, b) => a.getTime() - b.getTime());
     timesExits.sort((a, b) => a.getTime() - b.getTime());
 
-    // Check that each entrance is before corresponding exit
-    if (timesEntrances.length !== timesExits.length) {
+    // Only check entrance-exit count if at least one exit is present
+    if (timesExits.length > 0 && timesEntrances.length !== timesExits.length) {
       setError("Numero di orari di entrata e uscita non corrispondono");
       setCalculatedFinalOut("");
       return;
     }
-    for (let i = 0; i < timesEntrances.length; i++) {
+    for (let i = 0; i < timesEntrances.length && i < timesExits.length; i++) {
       if (timesEntrances[i].getTime() >= timesExits[i].getTime()) {
         setError(
           `L'orario di entrata #${i + 1} deve essere precedente all'uscita corrispondente`,
@@ -206,33 +187,12 @@ const WorkTimeTracker = () => {
       }
     }
 
-    // Calcolo pausa pranzo
     let lunchPauseMins = 30;
     if (lunchOutDate && lunchInDate) {
       const actualLunchPause = diffMinutes(lunchOutDate, lunchInDate);
       lunchPauseMins = actualLunchPause < 30 ? 30 : actualLunchPause;
     }
 
-    // Calcolo tempo totale lavorato sommando tutti gli intervalli entrata-uscita
-    let totalWorkedMins = 0;
-    for (let i = 0; i < timesEntrances.length; i++) {
-      totalWorkedMins += diffMinutes(timesEntrances[i], timesExits[i]);
-    }
-    // Sottraggo la pausa pranzo effettiva (non conteggiata come lavoro)
-    totalWorkedMins -= lunchPauseMins;
-
-    // Calcolo debito/credito
-    const requiredWorkMins = WORK_DURATION_MIN;
-    let creditMins = 0;
-    let debtMins = 0;
-
-    if (totalWorkedMins < requiredWorkMins) {
-      debtMins = requiredWorkMins - totalWorkedMins;
-    } else {
-      creditMins = totalWorkedMins - requiredWorkMins;
-    }
-
-    // Calcolo orario di uscita previsto includendo debito pausa extra da recuperare
     const extraRecovery = lunchPauseMins > 30 ? lunchPauseMins - 30 : 0;
     const predictedFinalOutMins =
       toMinutes(morningInDate) + WORK_DURATION_MIN + LUNCH_MIN + extraRecovery;
@@ -245,12 +205,11 @@ const WorkTimeTracker = () => {
       return;
     }
 
-    // Controllo lavoro minimo entro le 14:12
+    // Check minimum work by 14:12
     let workBy1412 = 0;
     const limitTime = LATEST_3H36M_TIME;
 
-    // Calcolo lavoro entro le 14:12 sommando intervalli parziali
-    for (let i = 0; i < timesEntrances.length; i++) {
+    for (let i = 0; i < timesEntrances.length && i < timesExits.length; i++) {
       const startMins = toMinutes(timesEntrances[i]);
       const endMins = toMinutes(timesExits[i]);
       if (endMins <= limitTime) {
@@ -268,7 +227,6 @@ const WorkTimeTracker = () => {
       return;
     }
 
-    // Controllo pausa pranzo minima se presente
     if (lunchOutDate && lunchInDate) {
       const workedBeforeLunch = diffMinutes(morningInDate, lunchOutDate);
       const workedAfterLunch = predictedFinalOutMins - toMinutes(lunchInDate);
@@ -327,7 +285,6 @@ const WorkTimeTracker = () => {
   const finalOutDate = parseTime(finalOut);
   const calculatedFinalOutDate = calculatedFinalOut ? parseTime(calculatedFinalOut) : null;
 
-  // Compose all entrances and exits for display total worked time
   const allEntrances: Date[] = [];
   const allExits: Date[] = [];
 
@@ -368,7 +325,6 @@ const WorkTimeTracker = () => {
   const totalWorkedHours = Math.floor(totalWorkedMins / 60);
   const totalWorkedMinutes = Math.round(totalWorkedMins % 60);
 
-  // Calculate credit and debt for display
   const requiredWorkMins = WORK_DURATION_MIN;
   let creditMins = 0;
   let debtMins = 0;
@@ -392,6 +348,9 @@ const WorkTimeTracker = () => {
 
   const creditHours = Math.floor(creditMins / 60);
   const creditMinutes = Math.round(creditMins % 60);
+
+  // Show statistics if morningIn is set and at least one exit time (final or calculated) is present
+  const showStats = morningInDate && (finalOutDate || calculatedFinalOutDate);
 
   return (
     <div className="max-w-md mx-auto p-6 bg-white rounded-md shadow-md">
@@ -537,14 +496,7 @@ const WorkTimeTracker = () => {
         <div className="mt-4 p-3 bg-yellow-100 text-yellow-700 rounded">{info}</div>
       )}
 
-      {calculatedFinalOut && !error && (
-        <div className="mt-4 p-3 bg-green-100 text-green-700 rounded">
-          Orario di uscita previsto per fare 7h12m recuperando tutto il debito:{" "}
-          <strong>{calculatedFinalOut}</strong>
-        </div>
-      )}
-
-      {morningIn && (finalOut || calculatedFinalOut) && (
+      {showStats && (
         <div className="mt-4">
           <p>
             Ore lavorate (escluse pausa):{" "}
