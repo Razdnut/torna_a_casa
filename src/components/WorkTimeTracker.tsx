@@ -314,15 +314,12 @@ const WorkTimeTracker = () => {
     lunchPauseMins = actualLunchPause < 30 ? 30 : actualLunchPause;
   }
 
-  // Il tempo totale lavorato esclude la pausa pranzo intera
   const effectiveWorkMins = totalWorkedMins - lunchPauseMins;
 
-  // Calcolo debito: se il lavoro effettivo è minore di 7h12m, debito è differenza + eventuali minuti extra di pausa
-  // Se lavoro effettivo è maggiore, credito è differenza senza considerare pausa extra (perché è già esclusa)
   let creditMins = 0;
   let debtMins = 0;
 
-  if (morningInDate && (finalOutDate || calculatedFinalOutDate)) {
+  if (morningInDate && (finalOutDate || calculatedFinalOutDate || allExits.length > 0)) {
     if (effectiveWorkMins < WORK_DURATION_MIN) {
       debtMins = WORK_DURATION_MIN - effectiveWorkMins;
     } else {
@@ -330,7 +327,6 @@ const WorkTimeTracker = () => {
     }
   }
 
-  // Qui definisco le variabili mancanti per il rendering
   const totalWorkedHours = Math.floor(totalWorkedMins / 60);
   const totalWorkedMinutes = Math.round(totalWorkedMins % 60);
 
@@ -340,7 +336,10 @@ const WorkTimeTracker = () => {
   const creditHours = Math.floor(creditMins / 60);
   const creditMinutes = Math.round(creditMins % 60);
 
-  const showStats = morningInDate && (finalOutDate || calculatedFinalOutDate);
+  // Modifico la condizione per mostrare le statistiche
+  const showStats =
+    morningInDate &&
+    (finalOutDate || calculatedFinalOutDate || allExits.length > 0);
 
   return (
     <div className="max-w-md mx-auto p-6 bg-white rounded-md shadow-md">
