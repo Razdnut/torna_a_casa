@@ -68,6 +68,7 @@ const WorkTimeTracker = () => {
     credit: number;
     totalWithPermit: number;
     permitDuration: number;
+    totalRaw: number;
   } | null>(null);
 
   const [lunchDuration, setLunchDuration] = useState<number | null>(null);
@@ -187,7 +188,11 @@ const WorkTimeTracker = () => {
       // Calcolo solo su Ingresso Mattina e Uscita Finale
       // Il tempo richiesto è 7h12m + 30min pausa obbligatoria = 462 min (+ permesso)
       const totalRaw = diffMinutes(morningInDate, finalOutDate);
-      const total = totalRaw - PAUSA_OBBLIGATORIA_MIN; // SOTTRAI i 30 min di pausa obbligatoria
+      let total = totalRaw - PAUSA_OBBLIGATORIA_MIN; // SOTTRAI i 30 min di pausa obbligatoria
+      // Se entrambe le checkbox sono selezionate, NON sottrarre i 30 min
+      if (usedPermit && pauseNoExit) {
+        total = totalRaw;
+      }
       let debt = 0;
       let credit = 0;
       if (totalRaw < WORK_DURATION_MIN + PAUSA_OBBLIGATORIA_MIN + permitDuration) {
@@ -197,7 +202,7 @@ const WorkTimeTracker = () => {
       }
       // Ore lavorate effettive + permesso
       const totalWithPermit = total + permitDuration;
-      setCalculated({ total, debt, credit, totalWithPermit, permitDuration });
+      setCalculated({ total, debt, credit, totalWithPermit, permitDuration, totalRaw });
       return;
     }
 
@@ -259,7 +264,7 @@ const WorkTimeTracker = () => {
     }
     // Ore lavorate effettive + permesso
     const totalWithPermit = total + permitDuration;
-    setCalculated({ total, debt, credit, totalWithPermit, permitDuration });
+    setCalculated({ total, debt, credit, totalWithPermit, permitDuration, totalRaw: total });
   };
 
   return (
@@ -416,9 +421,11 @@ const WorkTimeTracker = () => {
           <p>
             Ore lavorate (escluse pause):{" "}
             <strong>
-              {usedPermit && calculated.permitDuration > 0
-                ? `${Math.floor(calculated.totalWithPermit / 60)}h ${Math.round(calculated.totalWithPermit % 60)}m`
-                : `${Math.floor(calculated.total / 60)}h ${Math.round(calculated.total % 60)}m`
+              {usedPermit && pauseNoExit && calculated.permitDuration > 0
+                ? `${Math.floor((calculated.totalRaw + calculated.permitDuration) / 60)}h ${Math.round((calculated.totalRaw + calculated.permitDuration) % 60)}m`
+                : usedPermit && calculated.permitDuration > 0
+                  ? `${Math.floor(calculated.totalWithPermit / 60)}h ${Math.round(calculated.totalWithPermit % 60)}m`
+                  : `${Math.floor(calculated.total / 60)}h ${Math.round(calculated.total % 60)}m`
               }
             </strong>
           </p>
