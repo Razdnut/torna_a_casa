@@ -39,6 +39,7 @@ function addMinutes(date: Date, mins: number): Date {
 }
 
 const WORK_DURATION_MIN = 7 * 60 + 12; // 7h12m = 432 min
+const PAUSA_OBBLIGATORIA_MIN = 30; // 30 minuti pausa obbligatoria
 
 const OFFICE_OPEN = 7 * 60 + 30; // 7:30 in minuti
 const OFFICE_CLOSE = 19 * 60; // 19:00 in minuti
@@ -89,7 +90,8 @@ const WorkTimeTracker = () => {
       // Solo ingresso mattina richiesto
       const morningInDate = parseTime(morningIn);
       if (morningInDate) {
-        const exit = addMinutes(morningInDate, WORK_DURATION_MIN);
+        // 7h12m + 30min pausa obbligatoria = 7h42m = 462 min
+        const exit = addMinutes(morningInDate, WORK_DURATION_MIN + PAUSA_OBBLIGATORIA_MIN);
         setExitHypothesis(formatTime(exit));
       } else {
         setExitHypothesis(null);
@@ -158,13 +160,14 @@ const WorkTimeTracker = () => {
         return;
       }
       // Calcolo solo su Ingresso Mattina e Uscita Finale
+      // Il tempo richiesto è 7h12m + 30min pausa obbligatoria = 462 min
       const total = diffMinutes(morningInDate, finalOutDate);
       let debt = 0;
       let credit = 0;
-      if (total < WORK_DURATION_MIN) {
-        debt = WORK_DURATION_MIN - total;
-      } else if (total > WORK_DURATION_MIN) {
-        credit = total - WORK_DURATION_MIN;
+      if (total < WORK_DURATION_MIN + PAUSA_OBBLIGATORIA_MIN) {
+        debt = WORK_DURATION_MIN + PAUSA_OBBLIGATORIA_MIN - total;
+      } else if (total > WORK_DURATION_MIN + PAUSA_OBBLIGATORIA_MIN) {
+        credit = total - (WORK_DURATION_MIN + PAUSA_OBBLIGATORIA_MIN);
       }
       setCalculated({ total, debt, credit });
       return;
@@ -320,7 +323,7 @@ const WorkTimeTracker = () => {
       {/* Ipotesi orario uscita */}
       {exitHypothesis && (
         <div className="mt-2 p-2 bg-blue-100 rounded text-blue-900 text-sm font-semibold">
-          Ipotesi orario uscita per 7h12m: <strong>{exitHypothesis}</strong>
+          Ipotesi orario uscita per {pauseNoExit ? "7h12m + 30min pausa" : "7h12m"}: <strong>{exitHypothesis}</strong>
         </div>
       )}
 
