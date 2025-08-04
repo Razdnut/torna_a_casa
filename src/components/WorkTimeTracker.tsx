@@ -205,12 +205,15 @@ const WorkTimeTracker = () => {
       // Ore lavorate effettive + permesso (ma per visualizzazione, vedi sotto)
       const totalWithPermit = total + permitDuration;
 
-      // Nuovo: se entrambe le checkbox sono selezionate e il tempo effettivo (senza permesso) >= 7h12m, somma anche la durata permesso
+      // Nuovo: se entrambe le checkbox sono selezionate e il tempo effettivo (senza permesso) > 7h12m, somma anche la durata permesso
       let totalWithPermitIfReached = total;
       let reachedWorkTime = false;
       if (usedPermit && pauseNoExit) {
-        if (total >= WORK_DURATION_MIN) {
+        if (total > WORK_DURATION_MIN) {
           totalWithPermitIfReached = total + permitDuration;
+          reachedWorkTime = true;
+        } else if (total === WORK_DURATION_MIN) {
+          totalWithPermitIfReached = total; // NON sommare il permesso
           reachedWorkTime = true;
         }
       }
@@ -303,9 +306,13 @@ const WorkTimeTracker = () => {
     if (!calculated) return 0;
     // Caso: entrambe le checkbox selezionate e pausa senza uscita
     if (usedPermit && pauseNoExit) {
-      // Se raggiunto il tempo minimo, somma anche il permesso
+      // Se raggiunto il tempo minimo, somma anche il permesso SOLO se il tempo effettivo è maggiore del minimo
       if (calculated.reachedWorkTime) {
-        return calculated.total + calculated.permitDuration;
+        if (calculated.total > WORK_DURATION_MIN) {
+          return calculated.total + calculated.permitDuration;
+        } else {
+          return calculated.total;
+        }
       } else {
         return calculated.total;
       }
