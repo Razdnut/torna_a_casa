@@ -160,18 +160,15 @@ const WorkTimeTracker = () => {
     const finalOutDate = parseTime(finalOut);
     const calcFinalOutDate = calculatedFinalOut ? parseTime(calculatedFinalOut) : null;
 
-    // Use finalOutDate if present, else fallback to calculatedFinalOutDate
     if (finalOutDate) {
       timesExits.push(finalOutDate);
     } else if (calcFinalOutDate) {
       timesExits.push(calcFinalOutDate);
     }
 
-    // Sort entrances and exits ascending
     timesEntrances.sort((a, b) => a.getTime() - b.getTime());
     timesExits.sort((a, b) => a.getTime() - b.getTime());
 
-    // Only check entrance-exit count if at least one exit is present
     if (timesExits.length > 0 && timesEntrances.length !== timesExits.length) {
       setError("Numero di orari di entrata e uscita non corrispondono");
       setCalculatedFinalOut("");
@@ -205,7 +202,6 @@ const WorkTimeTracker = () => {
       return;
     }
 
-    // Check minimum work by 14:12
     let workBy1412 = 0;
     const limitTime = LATEST_3H36M_TIME;
 
@@ -250,7 +246,6 @@ const WorkTimeTracker = () => {
     setCalculatedFinalOut(formatTime(fromMinutes(predictedFinalOutMins)));
   }, [morningIn, lunchOut, lunchIn, finalOut, extraEntrances, extraExits]);
 
-  // Handlers for extra entrances and exits
   const addExtraEntrance = () => {
     setExtraEntrances((prev) => [...prev, ""]);
   };
@@ -278,7 +273,6 @@ const WorkTimeTracker = () => {
     setExtraExits((prev) => prev.filter((_, i) => i !== index));
   };
 
-  // Calculate total worked time for display
   const morningInDate = parseTime(morningIn);
   const lunchOutDate = parseTime(lunchOut);
   const lunchInDate = parseTime(lunchIn);
@@ -320,30 +314,19 @@ const WorkTimeTracker = () => {
     lunchPauseMins = actualLunchPause < 30 ? 30 : actualLunchPause;
   }
 
-  totalWorkedMins -= lunchPauseMins;
+  // Il tempo totale lavorato esclude la pausa pranzo intera
+  const effectiveWorkMins = totalWorkedMins - lunchPauseMins;
 
-  const totalWorkedHours = Math.floor(totalWorkedMins / 60);
-  const totalWorkedMinutes = Math.round(totalWorkedMins % 60);
-
-  // Calcolo debito considerando solo i minuti oltre i 30 di pausa pranzo obbligatoria
-  const extraLunchPause = lunchPauseMins > 30 ? lunchPauseMins - 30 : 0;
-
+  // Calcolo debito: se il lavoro effettivo è minore di 7h12m, debito è differenza + eventuali minuti extra di pausa
+  // Se lavoro effettivo è maggiore, credito è differenza senza considerare pausa extra (perché è già esclusa)
   let creditMins = 0;
   let debtMins = 0;
 
   if (morningInDate && (finalOutDate || calculatedFinalOutDate)) {
-    const totalTime = allExits.reduce((acc, exit, i) => {
-      const entrance = allEntrances[i];
-      if (!entrance) return acc;
-      return acc + diffMinutes(entrance, exit);
-    }, 0);
-    const requiredTime = WORK_DURATION_MIN + 30; // 7h12m lavoro + 30m pausa obbligatoria
-    const actualWorkTime = totalTime - extraLunchPause; // escludo debito pausa extra
-
-    if (actualWorkTime < WORK_DURATION_MIN) {
-      debtMins = WORK_DURATION_MIN - actualWorkTime;
+    if (effectiveWorkMins < WORK_DURATION_MIN) {
+      debtMins = WORK_DURATION_MIN - effectiveWorkMins;
     } else {
-      creditMins = actualWorkTime - WORK_DURATION_MIN;
+      creditMins = effectiveWorkMins - WORK_DURATION_MIN;
     }
   }
 
@@ -353,7 +336,6 @@ const WorkTimeTracker = () => {
   const creditHours = Math.floor(creditMins / 60);
   const creditMinutes = Math.round(creditMins % 60);
 
-  // Mostra sempre le statistiche se ingresso mattina è presente e c'è almeno un orario di uscita (finale o calcolato)
   const showStats = morningInDate && (finalOutDate || calculatedFinalOutDate);
 
   return (
