@@ -325,7 +325,9 @@ const WorkTimeTracker = () => {
   const totalWorkedHours = Math.floor(totalWorkedMins / 60);
   const totalWorkedMinutes = Math.round(totalWorkedMins % 60);
 
-  const requiredWorkMins = WORK_DURATION_MIN;
+  // Calcolo debito considerando solo i minuti oltre i 30 di pausa pranzo obbligatoria
+  const extraLunchPause = lunchPauseMins > 30 ? lunchPauseMins - 30 : 0;
+
   let creditMins = 0;
   let debtMins = 0;
 
@@ -335,11 +337,13 @@ const WorkTimeTracker = () => {
       if (!entrance) return acc;
       return acc + diffMinutes(entrance, exit);
     }, 0);
-    const requiredTime = WORK_DURATION_MIN + lunchPauseMins;
-    if (totalTime < requiredTime) {
-      debtMins = requiredTime - totalTime;
+    const requiredTime = WORK_DURATION_MIN + 30; // 7h12m lavoro + 30m pausa obbligatoria
+    const actualWorkTime = totalTime - extraLunchPause; // escludo debito pausa extra
+
+    if (actualWorkTime < WORK_DURATION_MIN) {
+      debtMins = WORK_DURATION_MIN - actualWorkTime;
     } else {
-      creditMins = totalTime - requiredTime;
+      creditMins = actualWorkTime - WORK_DURATION_MIN;
     }
   }
 
@@ -349,7 +353,7 @@ const WorkTimeTracker = () => {
   const creditHours = Math.floor(creditMins / 60);
   const creditMinutes = Math.round(creditMins % 60);
 
-  // Show statistics if morningIn is set and at least one exit time (final or calculated) is present
+  // Mostra sempre le statistiche se ingresso mattina è presente e c'è almeno un orario di uscita (finale o calcolato)
   const showStats = morningInDate && (finalOutDate || calculatedFinalOutDate);
 
   return (
