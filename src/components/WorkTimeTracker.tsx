@@ -71,23 +71,41 @@ const WorkTimeTracker = () => {
   useEffect(() => {
     const lunchOutDate = parseTime(lunchOut);
     const lunchInDate = parseTime(lunchIn);
-    if (lunchOutDate && lunchInDate && toMinutes(lunchInDate) > toMinutes(lunchOutDate)) {
+    if (
+      !pauseNoExit &&
+      lunchOutDate &&
+      lunchInDate &&
+      toMinutes(lunchInDate) > toMinutes(lunchOutDate)
+    ) {
       setLunchDuration(diffMinutes(lunchOutDate, lunchInDate));
     } else {
       setLunchDuration(null);
     }
-  }, [lunchOut, lunchIn]);
+  }, [lunchOut, lunchIn, pauseNoExit]);
 
   // Calcolo ipotesi orario uscita
   useEffect(() => {
     if (pauseNoExit) {
-      setExitHypothesis(null);
+      // Solo ingresso mattina richiesto
+      const morningInDate = parseTime(morningIn);
+      if (morningInDate) {
+        const exit = addMinutes(morningInDate, WORK_DURATION_MIN);
+        setExitHypothesis(formatTime(exit));
+      } else {
+        setExitHypothesis(null);
+      }
       return;
     }
+    // Pausa con uscita: servono i tre campi
     const morningInDate = parseTime(morningIn);
     const lunchOutDate = parseTime(lunchOut);
     const lunchInDate = parseTime(lunchIn);
-    if (morningInDate && lunchOutDate && lunchInDate && toMinutes(lunchInDate) > toMinutes(lunchOutDate)) {
+    if (
+      morningInDate &&
+      lunchOutDate &&
+      lunchInDate &&
+      toMinutes(lunchInDate) > toMinutes(lunchOutDate)
+    ) {
       // Ore lavorate mattina
       const morningBlock = diffMinutes(morningInDate, lunchOutDate);
       // Ore da lavorare dopo pranzo
@@ -111,12 +129,57 @@ const WorkTimeTracker = () => {
     const lunchInDate = parseTime(lunchIn);
     const finalOutDate = parseTime(finalOut);
 
-    if (!morningInDate || !finalOutDate) {
-      setError("Compila almeno Ingresso Mattina e Uscita Finale.");
-      setCalculated(null);
+    // Caso "pausa pranzo senza uscita"
+    if (pauseNoExit) {
+      if (!morningInDate) {
+        setError("Compila almeno Ingresso Mattina.");
+        setCalculated(null);
+        return;
+      }
+      // Se non c'è uscita finale, mostra solo ipotesi
+      if (!finalOutDate) {
+        // Mostra solo ipotesi (già calcolata in blu)
+        setCalculated(null);
+        return;
+      }
+      if (toMinutes(morningInDate) < OFFICE_OPEN) {
+        setError("L'orario di ingresso mattutino non può essere prima delle 7:30");
+        setCalculated(null);
+        return;
+      }
+      if (toMinutes(finalOutDate) > OFFICE_CLOSE) {
+        setError("L'orario di uscita finale non può essere dopo le 19:00");
+        setCalculated(null);
+        return;
+      }
+      if (toMinutes(finalOutDate) <= toMinutes(morningInDate)) {
+        setError("L'uscita finale deve essere dopo l'ingresso mattina");
+        setCalculated(null);
+        return;
+      }
+      // Calcolo solo su Ingresso Mattina e Uscita Finale
+      const total = diffMinutes(morningInDate, finalOutDate);
+      let debt = 0;
+      let credit = 0;
+      if (total < WORK_DURATION_MIN) {
+        debt = WORK_DURATION_MIN - total;
+      } else if (total > WORK_DURATION_MIN) {
+        credit = total - WORK_DURATION_MIN;
+      }
+      setCalculated({ total, debt, credit });
       return;
     }
 
+    // Caso normale (pausa pranzo con uscita)
+    if (!morningInDate || !lunchOutDate || !lunchInDate) {
+      setError("Compila tutti gli orari richiesti per il calcolo.");
+      setCalculated(null);
+      return;
+    }
+    if (!finalOutDate) {
+      setCalculated(null);
+      return;
+    }
     if (toMinutes(morningInDate) < OFFICE_OPEN) {
       setError("L'orario di ingresso mattutino non può essere prima delle 7:30");
       setCalculated(null);
@@ -127,54 +190,35 @@ const WorkTimeTracker = () => {
       setCalculated(null);
       return;
     }
-
-    let total = 0;
-    if (pauseNoExit) {
-      // Calcolo solo su Ingresso Mattina e Uscita Finale
-      if (toMinutes(finalOutDate) <= toMinutes(morningInDate)) {
-        setError("L'uscita finale deve essere dopo l'ingresso mattina");
-        setCalculated(null);
-        return;
-      }
-      total = diffMinutes(morningInDate, finalOutDate);
-    } else {
-      // Serve anche la pausa pranzo
-      if (!lunchOutDate || !lunchInDate) {
-        setError("Compila anche Uscita Pausa Pranzo e Rientro Pausa Pranzo.");
-        setCalculated(null);
-        return;
-      }
-      if (toMinutes(lunchOutDate) < LUNCH_START) {
-        setError("La pausa pranzo può iniziare solo dalle 12:00");
-        setCalculated(null);
-        return;
-      }
-      if (toMinutes(lunchInDate) > LUNCH_END) {
-        setError("Il rientro dalla pausa pranzo non può essere dopo le 15:00");
-        setCalculated(null);
-        return;
-      }
-      if (toMinutes(lunchInDate) <= toMinutes(lunchOutDate)) {
-        setError("L'orario di rientro deve essere dopo l'uscita in pausa");
-        setCalculated(null);
-        return;
-      }
-      if (toMinutes(lunchOutDate) <= toMinutes(morningInDate)) {
-        setError("L'uscita pausa pranzo deve essere dopo l'ingresso mattina");
-        setCalculated(null);
-        return;
-      }
-      if (toMinutes(finalOutDate) <= toMinutes(lunchInDate)) {
-        setError("L'uscita finale deve essere dopo il rientro pausa pranzo");
-        setCalculated(null);
-        return;
-      }
-      // Calcolo solo i due blocchi
-      const morningBlock = diffMinutes(morningInDate, lunchOutDate);
-      const afternoonBlock = diffMinutes(lunchInDate, finalOutDate);
-      total = morningBlock + afternoonBlock;
+    if (toMinutes(lunchOutDate) < LUNCH_START) {
+      setError("La pausa pranzo può iniziare solo dalle 12:00");
+      setCalculated(null);
+      return;
     }
-
+    if (toMinutes(lunchInDate) > LUNCH_END) {
+      setError("Il rientro dalla pausa pranzo non può essere dopo le 15:00");
+      setCalculated(null);
+      return;
+    }
+    if (toMinutes(lunchInDate) <= toMinutes(lunchOutDate)) {
+      setError("L'orario di rientro deve essere dopo l'uscita in pausa");
+      setCalculated(null);
+      return;
+    }
+    if (toMinutes(lunchOutDate) <= toMinutes(morningInDate)) {
+      setError("L'uscita pausa pranzo deve essere dopo l'ingresso mattina");
+      setCalculated(null);
+      return;
+    }
+    if (toMinutes(finalOutDate) <= toMinutes(lunchInDate)) {
+      setError("L'uscita finale deve essere dopo il rientro pausa pranzo");
+      setCalculated(null);
+      return;
+    }
+    // Calcolo solo i due blocchi
+    const morningBlock = diffMinutes(morningInDate, lunchOutDate);
+    const afternoonBlock = diffMinutes(lunchInDate, finalOutDate);
+    const total = morningBlock + afternoonBlock;
     let debt = 0;
     let credit = 0;
     if (total < WORK_DURATION_MIN) {
@@ -182,7 +226,6 @@ const WorkTimeTracker = () => {
     } else if (total > WORK_DURATION_MIN) {
       credit = total - WORK_DURATION_MIN;
     }
-
     setCalculated({ total, debt, credit });
   };
 
@@ -252,7 +295,7 @@ const WorkTimeTracker = () => {
             onChange={(e) => setFinalOut(e.target.value)}
             min="07:30"
             max="19:00"
-            required
+            required={false}
           />
         </div>
         <div className="flex items-center space-x-2 mt-2">
@@ -275,7 +318,7 @@ const WorkTimeTracker = () => {
       )}
 
       {/* Ipotesi orario uscita */}
-      {!pauseNoExit && exitHypothesis && (
+      {exitHypothesis && (
         <div className="mt-2 p-2 bg-blue-100 rounded text-blue-900 text-sm font-semibold">
           Ipotesi orario uscita per 7h12m: <strong>{exitHypothesis}</strong>
         </div>
