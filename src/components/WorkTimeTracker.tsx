@@ -161,13 +161,14 @@ const WorkTimeTracker = () => {
       }
       // Calcolo solo su Ingresso Mattina e Uscita Finale
       // Il tempo richiesto è 7h12m + 30min pausa obbligatoria = 462 min
-      const total = diffMinutes(morningInDate, finalOutDate);
+      const totalRaw = diffMinutes(morningInDate, finalOutDate);
+      const total = totalRaw - PAUSA_OBBLIGATORIA_MIN; // SOTTRAI i 30 min di pausa obbligatoria
       let debt = 0;
       let credit = 0;
-      if (total < WORK_DURATION_MIN + PAUSA_OBBLIGATORIA_MIN) {
-        debt = WORK_DURATION_MIN + PAUSA_OBBLIGATORIA_MIN - total;
-      } else if (total > WORK_DURATION_MIN + PAUSA_OBBLIGATORIA_MIN) {
-        credit = total - (WORK_DURATION_MIN + PAUSA_OBBLIGATORIA_MIN);
+      if (totalRaw < WORK_DURATION_MIN + PAUSA_OBBLIGATORIA_MIN) {
+        debt = WORK_DURATION_MIN + PAUSA_OBBLIGATORIA_MIN - totalRaw;
+      } else if (totalRaw > WORK_DURATION_MIN + PAUSA_OBBLIGATORIA_MIN) {
+        credit = totalRaw - (WORK_DURATION_MIN + PAUSA_OBBLIGATORIA_MIN);
       }
       setCalculated({ total, debt, credit });
       return;
