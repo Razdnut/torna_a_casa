@@ -200,7 +200,7 @@ const WorkTimeTracker = () => {
       } else if (totalRaw > WORK_DURATION_MIN + PAUSA_OBBLIGATORIA_MIN + permitDuration) {
         credit = totalRaw - (WORK_DURATION_MIN + PAUSA_OBBLIGATORIA_MIN + permitDuration);
       }
-      // Ore lavorate effettive + permesso
+      // Ore lavorate effettive + permesso (ma per visualizzazione, vedi sotto)
       const totalWithPermit = total + permitDuration;
       setCalculated({ total, debt, credit, totalWithPermit, permitDuration, totalRaw });
       return;
@@ -421,8 +421,8 @@ const WorkTimeTracker = () => {
           <p>
             Ore lavorate (escluse pause):{" "}
             <strong>
-              {usedPermit && pauseNoExit && calculated.permitDuration > 0
-                ? `${Math.floor((calculated.totalRaw + calculated.permitDuration) / 60)}h ${Math.round((calculated.totalRaw + calculated.permitDuration) % 60)}m`
+              {usedPermit && pauseNoExit
+                ? `${Math.floor(calculated.totalRaw / 60)}h ${Math.round(calculated.totalRaw % 60)}m`
                 : usedPermit && calculated.permitDuration > 0
                   ? `${Math.floor(calculated.totalWithPermit / 60)}h ${Math.round(calculated.totalWithPermit % 60)}m`
                   : `${Math.floor(calculated.total / 60)}h ${Math.round(calculated.total % 60)}m`
