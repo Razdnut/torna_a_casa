@@ -144,8 +144,12 @@ const WorkTimeTracker = () => {
 
     if (effectiveWorkMins < WORK_DURATION_MIN + lunchPauseMins) {
       debt = WORK_DURATION_MIN + lunchPauseMins - effectiveWorkMins;
-      // Sottraiamo i 30 minuti obbligatori di pausa pranzo dal debito
-      debt = Math.max(0, debt - 30);
+      // Se il debito è minore o uguale a 30 minuti (pausa obbligatoria), azzeralo
+      if (debt <= 30) {
+        debt = 0;
+      } else {
+        debt = debt - 30;
+      }
     } else {
       credit = effectiveWorkMins - (WORK_DURATION_MIN + lunchPauseMins);
     }
