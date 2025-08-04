@@ -137,32 +137,14 @@ const WorkTimeTracker = () => {
       totalWorkedMins += diffMinutes(allEntrances[i], allExits[i]);
     }
 
-    const effectiveWorkMins = totalWorkedMins;
-
+    const requiredMins = WORK_DURATION_MIN + lunchPauseMins;
     let debt = 0;
     let credit = 0;
 
-    if (effectiveWorkMins < WORK_DURATION_MIN + lunchPauseMins) {
-      debt = WORK_DURATION_MIN + lunchPauseMins - effectiveWorkMins;
-      // Se il debito è minore o uguale a 30 minuti (pausa obbligatoria), azzeralo
-      if (debt <= 30) {
-        debt = 0;
-      } else {
-        debt = debt - 30;
-      }
+    if (totalWorkedMins < requiredMins) {
+      debt = requiredMins - totalWorkedMins;
     } else {
-      credit = effectiveWorkMins - (WORK_DURATION_MIN + lunchPauseMins);
-    }
-
-    // FIX: Se l'utente ha inserito Uscita Finale e il tempo lavorato effettivo copre anche il debito da pausa lunga, azzera il debito
-    if (finalOutDate) {
-      // Calcola il debito dovuto solo alla pausa lunga (oltre i 30 min)
-      const extraLunch = lunchPauseMins > 30 ? lunchPauseMins - 30 : 0;
-      // Il tempo richiesto totale è WORK_DURATION_MIN + LUNCH_MIN + extraLunch
-      const requiredMins = WORK_DURATION_MIN + LUNCH_MIN + extraLunch;
-      if (effectiveWorkMins >= requiredMins) {
-        debt = 0;
-      }
+      credit = totalWorkedMins - requiredMins;
     }
 
     setDebtMins(debt);
