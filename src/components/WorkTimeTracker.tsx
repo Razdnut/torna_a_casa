@@ -3,7 +3,7 @@
 import React, { useState, useEffect } from "react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { Plus, Minus } from "lucide-react";
+import { Checkbox } from "@/components/ui/checkbox";
 
 type TimeString = string; // "HH:mm"
 
@@ -32,6 +32,12 @@ function diffMinutes(start: Date, end: Date): number {
   return (end.getTime() - start.getTime()) / 60000;
 }
 
+function addMinutes(date: Date, mins: number): Date {
+  const d = new Date(date);
+  d.setMinutes(d.getMinutes() + mins);
+  return d;
+}
+
 const WORK_DURATION_MIN = 7 * 60 + 12; // 7h12m = 432 min
 
 const OFFICE_OPEN = 7 * 60 + 30; // 7:30 in minuti
@@ -48,6 +54,7 @@ const WorkTimeTracker = () => {
   const [lunchOut, setLunchOut] = useState<TimeString>("");
   const [lunchIn, setLunchIn] = useState<TimeString>("");
   const [finalOut, setFinalOut] = useState<TimeString>("");
+  const [pauseNoExit, setPauseNoExit] = useState(false);
 
   const [calculated, setCalculated] = useState<{
     total: number;
@@ -55,7 +62,46 @@ const WorkTimeTracker = () => {
     credit: number;
   } | null>(null);
 
+  const [lunchDuration, setLunchDuration] = useState<number | null>(null);
+  const [exitHypothesis, setExitHypothesis] = useState<string | null>(null);
+
   const [error, setError] = useState<string | null>(null);
+
+  // Calcolo durata pausa pranzo
+  useEffect(() => {
+    const lunchOutDate = parseTime(lunchOut);
+    const lunchInDate = parseTime(lunchIn);
+    if (lunchOutDate && lunchInDate && toMinutes(lunchInDate) > toMinutes(lunchOutDate)) {
+      setLunchDuration(diffMinutes(lunchOutDate, lunchInDate));
+    } else {
+      setLunchDuration(null);
+    }
+  }, [lunchOut, lunchIn]);
+
+  // Calcolo ipotesi orario uscita
+  useEffect(() => {
+    if (pauseNoExit) {
+      setExitHypothesis(null);
+      return;
+    }
+    const morningInDate = parseTime(morningIn);
+    const lunchOutDate = parseTime(lunchOut);
+    const lunchInDate = parseTime(lunchIn);
+    if (morningInDate && lunchOutDate && lunchInDate && toMinutes(lunchInDate) > toMinutes(lunchOutDate)) {
+      // Ore lavorate mattina
+      const morningBlock = diffMinutes(morningInDate, lunchOutDate);
+      // Ore da lavorare dopo pranzo
+      const remaining = WORK_DURATION_MIN - morningBlock;
+      if (remaining > 0) {
+        const exit = addMinutes(lunchInDate, remaining);
+        setExitHypothesis(formatTime(exit));
+      } else {
+        setExitHypothesis(formatTime(lunchInDate));
+      }
+    } else {
+      setExitHypothesis(null);
+    }
+  }, [morningIn, lunchOut, lunchIn, pauseNoExit]);
 
   const calculate = () => {
     setError(null);
@@ -65,13 +111,12 @@ const WorkTimeTracker = () => {
     const lunchInDate = parseTime(lunchIn);
     const finalOutDate = parseTime(finalOut);
 
-    if (!morningInDate || !lunchOutDate || !lunchInDate || !finalOutDate) {
-      setError("Compila tutti gli orari richiesti per il calcolo.");
+    if (!morningInDate || !finalOutDate) {
+      setError("Compila almeno Ingresso Mattina e Uscita Finale.");
       setCalculated(null);
       return;
     }
 
-    // Validazioni base
     if (toMinutes(morningInDate) < OFFICE_OPEN) {
       setError("L'orario di ingresso mattutino non può essere prima delle 7:30");
       setCalculated(null);
@@ -82,37 +127,54 @@ const WorkTimeTracker = () => {
       setCalculated(null);
       return;
     }
-    if (toMinutes(lunchOutDate) < LUNCH_START) {
-      setError("La pausa pranzo può iniziare solo dalle 12:00");
-      setCalculated(null);
-      return;
-    }
-    if (toMinutes(lunchInDate) > LUNCH_END) {
-      setError("Il rientro dalla pausa pranzo non può essere dopo le 15:00");
-      setCalculated(null);
-      return;
-    }
-    if (toMinutes(lunchInDate) <= toMinutes(lunchOutDate)) {
-      setError("L'orario di rientro deve essere dopo l'uscita in pausa");
-      setCalculated(null);
-      return;
-    }
-    if (toMinutes(lunchOutDate) <= toMinutes(morningInDate)) {
-      setError("L'uscita pausa pranzo deve essere dopo l'ingresso mattina");
-      setCalculated(null);
-      return;
-    }
-    if (toMinutes(finalOutDate) <= toMinutes(lunchInDate)) {
-      setError("L'uscita finale deve essere dopo il rientro pausa pranzo");
-      setCalculated(null);
-      return;
+
+    let total = 0;
+    if (pauseNoExit) {
+      // Calcolo solo su Ingresso Mattina e Uscita Finale
+      if (toMinutes(finalOutDate) <= toMinutes(morningInDate)) {
+        setError("L'uscita finale deve essere dopo l'ingresso mattina");
+        setCalculated(null);
+        return;
+      }
+      total = diffMinutes(morningInDate, finalOutDate);
+    } else {
+      // Serve anche la pausa pranzo
+      if (!lunchOutDate || !lunchInDate) {
+        setError("Compila anche Uscita Pausa Pranzo e Rientro Pausa Pranzo.");
+        setCalculated(null);
+        return;
+      }
+      if (toMinutes(lunchOutDate) < LUNCH_START) {
+        setError("La pausa pranzo può iniziare solo dalle 12:00");
+        setCalculated(null);
+        return;
+      }
+      if (toMinutes(lunchInDate) > LUNCH_END) {
+        setError("Il rientro dalla pausa pranzo non può essere dopo le 15:00");
+        setCalculated(null);
+        return;
+      }
+      if (toMinutes(lunchInDate) <= toMinutes(lunchOutDate)) {
+        setError("L'orario di rientro deve essere dopo l'uscita in pausa");
+        setCalculated(null);
+        return;
+      }
+      if (toMinutes(lunchOutDate) <= toMinutes(morningInDate)) {
+        setError("L'uscita pausa pranzo deve essere dopo l'ingresso mattina");
+        setCalculated(null);
+        return;
+      }
+      if (toMinutes(finalOutDate) <= toMinutes(lunchInDate)) {
+        setError("L'uscita finale deve essere dopo il rientro pausa pranzo");
+        setCalculated(null);
+        return;
+      }
+      // Calcolo solo i due blocchi
+      const morningBlock = diffMinutes(morningInDate, lunchOutDate);
+      const afternoonBlock = diffMinutes(lunchInDate, finalOutDate);
+      total = morningBlock + afternoonBlock;
     }
 
-    // Calcolo intervalli
-    const morningBlock = diffMinutes(morningInDate, lunchOutDate);
-    const afternoonBlock = diffMinutes(lunchInDate, finalOutDate);
-
-    const total = morningBlock + afternoonBlock;
     let debt = 0;
     let credit = 0;
     if (total < WORK_DURATION_MIN) {
@@ -124,7 +186,6 @@ const WorkTimeTracker = () => {
     setCalculated({ total, debt, credit });
   };
 
-  // UI
   return (
     <div className="max-w-md mx-auto p-6 bg-white rounded-md shadow-md">
       <h2 className="text-2xl font-semibold mb-4 text-center">
@@ -161,7 +222,8 @@ const WorkTimeTracker = () => {
             onChange={(e) => setLunchOut(e.target.value)}
             min="12:00"
             max="15:00"
-            required
+            required={!pauseNoExit}
+            disabled={pauseNoExit}
           />
         </div>
         <div>
@@ -175,7 +237,8 @@ const WorkTimeTracker = () => {
             onChange={(e) => setLunchIn(e.target.value)}
             min="12:30"
             max="15:00"
-            required
+            required={!pauseNoExit}
+            disabled={pauseNoExit}
           />
         </div>
         <div>
@@ -192,7 +255,31 @@ const WorkTimeTracker = () => {
             required
           />
         </div>
+        <div className="flex items-center space-x-2 mt-2">
+          <Checkbox
+            id="pauseNoExit"
+            checked={pauseNoExit}
+            onCheckedChange={(checked) => setPauseNoExit(!!checked)}
+          />
+          <label htmlFor="pauseNoExit" className="text-sm font-medium">
+            Pausa pranzo senza uscita
+          </label>
+        </div>
       </form>
+
+      {/* Durata pausa pranzo */}
+      {!pauseNoExit && lunchDuration !== null && (
+        <div className="mt-4 p-2 bg-gray-100 rounded text-blue-900 text-sm">
+          Durata pausa pranzo: <strong>{Math.floor(lunchDuration)} minuti</strong>
+        </div>
+      )}
+
+      {/* Ipotesi orario uscita */}
+      {!pauseNoExit && exitHypothesis && (
+        <div className="mt-2 p-2 bg-blue-100 rounded text-blue-900 text-sm font-semibold">
+          Ipotesi orario uscita per 7h12m: <strong>{exitHypothesis}</strong>
+        </div>
+      )}
 
       <div className="mt-4">
         <Button onClick={calculate} className="w-full" variant="default">
