@@ -200,20 +200,15 @@ const WorkTimeTracker = () => {
   const finalOutDate = parseTime(finalOut);
   const calculatedFinalOutDate = calculatedFinalOut ? parseTime(calculatedFinalOut) : null;
 
-  if (morningInDate) {
-    if (finalOut) {
-      if (lunchOutDate && lunchInDate) {
-        const actualLunchPause = diffMinutes(lunchOutDate, lunchInDate);
-        lunchPauseMins = actualLunchPause < 30 ? 30 : actualLunchPause;
-      }
-      if (finalOutDate) {
-        totalWorkedMins =
-          diffMinutes(morningInDate, finalOutDate) - lunchPauseMins;
-      }
-    } else if (calculatedFinalOutDate) {
-      totalWorkedMins = WORK_DURATION_MIN;
-      lunchPauseMins = 30;
+  if (morningInDate && finalOutDate) {
+    if (lunchOutDate && lunchInDate) {
+      const actualLunchPause = diffMinutes(lunchOutDate, lunchInDate);
+      lunchPauseMins = actualLunchPause < 30 ? 30 : actualLunchPause;
     }
+    totalWorkedMins = diffMinutes(morningInDate, finalOutDate) - lunchPauseMins;
+  } else if (morningInDate && calculatedFinalOutDate) {
+    totalWorkedMins = WORK_DURATION_MIN;
+    lunchPauseMins = 30;
   }
 
   const totalWorkedHours = Math.floor(totalWorkedMins / 60);
@@ -228,6 +223,7 @@ const WorkTimeTracker = () => {
 
   if (totalWorkedMins < WORK_DURATION_MIN) {
     // Debito giornaliero se ore lavorate inferiori a 7h12m
+    // Debito totale = differenza da 7h12m + debito pausa extra residuo
     debtMins = WORK_DURATION_MIN - totalWorkedMins + remainingLunchDebt;
     remainingLunchDebt = 0; // Debito pausa sommato al debito giornaliero
   } else {
@@ -344,7 +340,6 @@ const WorkTimeTracker = () => {
           <p>
             Pausa pranzo conteggiata: <strong>{lunchPauseMins} minuti</strong>
           </p>
-          {/* Rimuovo la visualizzazione del debito pausa extra perché è già incluso */}
           {debtMins > 0 && (
             <p className="text-red-700 font-semibold">
               Debito giornaliero: {debtHours}h {debtMinutes}m
