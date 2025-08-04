@@ -330,6 +330,10 @@ const WorkTimeTracker = () => {
     }
   }
 
+  // Qui definisco le variabili mancanti per il rendering
+  const totalWorkedHours = Math.floor(totalWorkedMins / 60);
+  const totalWorkedMinutes = Math.round(totalWorkedMins % 60);
+
   const debtHours = Math.floor(debtMins / 60);
   const debtMinutes = Math.round(debtMins % 60);
 
