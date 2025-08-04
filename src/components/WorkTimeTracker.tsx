@@ -293,6 +293,12 @@ const WorkTimeTracker = () => {
     totalWorkedMins += diffMinutes(allEntrances[i], allExits[i]);
   }
 
+  let lunchPauseMins = 30;
+  if (lunchOutDate && lunchInDate) {
+    const actualLunchPause = diffMinutes(lunchOutDate, lunchInDate);
+    lunchPauseMins = actualLunchPause < 30 ? 30 : actualLunchPause;
+  }
+
   const totalWorkedHours = Math.floor(totalWorkedMins / 60);
   const totalWorkedMinutes = Math.round(totalWorkedMins % 60);
 
