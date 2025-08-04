@@ -66,11 +66,11 @@ const WorkTimeTracker = () => {
   const [error, setError] = useState<string | null>(null);
   const [info, setInfo] = useState<string | null>(null);
 
-  // States for debt/credit updated on button click
+  // New states for debt/credit to update on button click
   const [debtMins, setDebtMins] = useState(0);
   const [creditMins, setCreditMins] = useState(0);
 
-  // Calculate predicted final out time based on inputs
+  // Function to calculate predicted final out time based on current inputs
   const calculatePredictedFinalOut = () => {
     setError(null);
     setInfo(null);
@@ -137,32 +137,25 @@ const WorkTimeTracker = () => {
       totalWorkedMins += diffMinutes(allEntrances[i], allExits[i]);
     }
 
-    // Calcolo pausa pranzo effettiva (minimo 30)
-    let lunchPauseEffective = 30;
-    if (lunchOutDate && lunchInDate) {
-      const actualPause = diffMinutes(lunchOutDate, lunchInDate);
-      lunchPauseEffective = actualPause < 30 ? 30 : actualPause;
-    }
-
-    // Ore lavorate effettive = totale lavorato - pausa pranzo effettiva
-    const effectiveWorkMins = totalWorkedMins - lunchPauseEffective;
+    const effectiveWorkMins = totalWorkedMins;
 
     let debt = 0;
     let credit = 0;
 
-    if (effectiveWorkMins < WORK_DURATION_MIN) {
-      debt = WORK_DURATION_MIN - effectiveWorkMins;
+    if (effectiveWorkMins < WORK_DURATION_MIN + lunchPauseMins) {
+      debt = WORK_DURATION_MIN + lunchPauseMins - effectiveWorkMins;
+      // Se il debito è minore o uguale a 30 minuti (pausa obbligatoria), azzeralo
+      if (debt <= 30) {
+        debt = 0;
+      } else {
+        debt = debt - 30;
+      }
     } else {
-      credit = effectiveWorkMins - WORK_DURATION_MIN;
+      credit = effectiveWorkMins - (WORK_DURATION_MIN + lunchPauseMins);
     }
 
-    // Se il debito è solo dovuto alla pausa pranzo obbligatoria, azzeralo
-    if (debt > 0 && debt <= 30) {
-      debt = 0;
-    }
-
-    setDebtMins(Math.round(debt));
-    setCreditMins(Math.round(credit));
+    setDebtMins(debt);
+    setCreditMins(credit);
   };
 
   useEffect(() => {
@@ -310,8 +303,8 @@ const WorkTimeTracker = () => {
     lunchPauseMins = actualLunchPause < 30 ? 30 : actualLunchPause;
   }
 
-  const totalWorkedHours = Math.floor((totalWorkedMins - lunchPauseMins) / 60);
-  const totalWorkedMinutes = Math.round((totalWorkedMins - lunchPauseMins) % 60);
+  const totalWorkedHours = Math.floor(totalWorkedMins / 60);
+  const totalWorkedMinutes = Math.round(totalWorkedMins % 60);
 
   const debtHours = Math.floor(debtMins / 60);
   const debtMinutes = Math.round(debtMins % 60);
