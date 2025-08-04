@@ -66,6 +66,8 @@ const WorkTimeTracker = () => {
     total: number;
     debt: number;
     credit: number;
+    totalWithPermit: number;
+    permitDuration: number;
   } | null>(null);
 
   const [lunchDuration, setLunchDuration] = useState<number | null>(null);
@@ -193,7 +195,9 @@ const WorkTimeTracker = () => {
       } else if (totalRaw > WORK_DURATION_MIN + PAUSA_OBBLIGATORIA_MIN + permitDuration) {
         credit = totalRaw - (WORK_DURATION_MIN + PAUSA_OBBLIGATORIA_MIN + permitDuration);
       }
-      setCalculated({ total, debt, credit });
+      // Ore lavorate effettive + permesso
+      const totalWithPermit = total + permitDuration;
+      setCalculated({ total, debt, credit, totalWithPermit, permitDuration });
       return;
     }
 
@@ -253,7 +257,9 @@ const WorkTimeTracker = () => {
     } else if (total > WORK_DURATION_MIN + permitDuration) {
       credit = total - (WORK_DURATION_MIN + permitDuration);
     }
-    setCalculated({ total, debt, credit });
+    // Ore lavorate effettive + permesso
+    const totalWithPermit = total + permitDuration;
+    setCalculated({ total, debt, credit, totalWithPermit, permitDuration });
   };
 
   return (
@@ -410,7 +416,10 @@ const WorkTimeTracker = () => {
           <p>
             Ore lavorate (escluse pause):{" "}
             <strong>
-              {Math.floor(calculated.total / 60)}h {Math.round(calculated.total % 60)}m
+              {usedPermit && calculated.permitDuration > 0
+                ? `${Math.floor(calculated.totalWithPermit / 60)}h ${Math.round(calculated.totalWithPermit % 60)}m`
+                : `${Math.floor(calculated.total / 60)}h ${Math.round(calculated.total % 60)}m`
+              }
             </strong>
           </p>
           {calculated.debt > 0 && (
