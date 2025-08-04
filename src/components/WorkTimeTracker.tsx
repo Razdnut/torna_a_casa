@@ -73,6 +73,17 @@ const WorkTimeTracker = () => {
 
   const [error, setError] = useState<string | null>(null);
 
+  // Calcolo durata permesso
+  function getPermitDuration(): number {
+    if (!usedPermit) return 0;
+    const out = parseTime(permitOut);
+    const inT = parseTime(permitIn);
+    if (out && inT && toMinutes(inT) > toMinutes(out)) {
+      return diffMinutes(out, inT);
+    }
+    return 0;
+  }
+
   // Calcolo durata pausa pranzo
   useEffect(() => {
     const lunchOutDate = parseTime(lunchOut);
@@ -91,12 +102,18 @@ const WorkTimeTracker = () => {
 
   // Calcolo ipotesi orario uscita
   useEffect(() => {
+    const permitDuration = getPermitDuration();
+
     if (pauseNoExit) {
       // Solo ingresso mattina richiesto
       const morningInDate = parseTime(morningIn);
       if (morningInDate) {
         // 7h12m + 30min pausa obbligatoria = 7h42m = 462 min
-        const exit = addMinutes(morningInDate, WORK_DURATION_MIN + PAUSA_OBBLIGATORIA_MIN);
+        // Se permesso, aggiungi la durata permesso
+        const exit = addMinutes(
+          morningInDate,
+          WORK_DURATION_MIN + PAUSA_OBBLIGATORIA_MIN + permitDuration
+        );
         setExitHypothesis(formatTime(exit));
       } else {
         setExitHypothesis(null);
@@ -116,7 +133,7 @@ const WorkTimeTracker = () => {
       // Ore lavorate mattina
       const morningBlock = diffMinutes(morningInDate, lunchOutDate);
       // Ore da lavorare dopo pranzo
-      const remaining = WORK_DURATION_MIN - morningBlock;
+      const remaining = WORK_DURATION_MIN - morningBlock + permitDuration;
       if (remaining > 0) {
         const exit = addMinutes(lunchInDate, remaining);
         setExitHypothesis(formatTime(exit));
@@ -126,7 +143,7 @@ const WorkTimeTracker = () => {
     } else {
       setExitHypothesis(null);
     }
-  }, [morningIn, lunchOut, lunchIn, pauseNoExit]);
+  }, [morningIn, lunchOut, lunchIn, pauseNoExit, usedPermit, permitOut, permitIn]);
 
   const calculate = () => {
     setError(null);
@@ -135,6 +152,7 @@ const WorkTimeTracker = () => {
     const lunchOutDate = parseTime(lunchOut);
     const lunchInDate = parseTime(lunchIn);
     const finalOutDate = parseTime(finalOut);
+    const permitDuration = getPermitDuration();
 
     // Caso "pausa pranzo senza uscita"
     if (pauseNoExit) {
@@ -165,15 +183,15 @@ const WorkTimeTracker = () => {
         return;
       }
       // Calcolo solo su Ingresso Mattina e Uscita Finale
-      // Il tempo richiesto è 7h12m + 30min pausa obbligatoria = 462 min
+      // Il tempo richiesto è 7h12m + 30min pausa obbligatoria = 462 min (+ permesso)
       const totalRaw = diffMinutes(morningInDate, finalOutDate);
       const total = totalRaw - PAUSA_OBBLIGATORIA_MIN; // SOTTRAI i 30 min di pausa obbligatoria
       let debt = 0;
       let credit = 0;
-      if (totalRaw < WORK_DURATION_MIN + PAUSA_OBBLIGATORIA_MIN) {
-        debt = WORK_DURATION_MIN + PAUSA_OBBLIGATORIA_MIN - totalRaw;
-      } else if (totalRaw > WORK_DURATION_MIN + PAUSA_OBBLIGATORIA_MIN) {
-        credit = totalRaw - (WORK_DURATION_MIN + PAUSA_OBBLIGATORIA_MIN);
+      if (totalRaw < WORK_DURATION_MIN + PAUSA_OBBLIGATORIA_MIN + permitDuration) {
+        debt = WORK_DURATION_MIN + PAUSA_OBBLIGATORIA_MIN + permitDuration - totalRaw;
+      } else if (totalRaw > WORK_DURATION_MIN + PAUSA_OBBLIGATORIA_MIN + permitDuration) {
+        credit = totalRaw - (WORK_DURATION_MIN + PAUSA_OBBLIGATORIA_MIN + permitDuration);
       }
       setCalculated({ total, debt, credit });
       return;
@@ -230,10 +248,10 @@ const WorkTimeTracker = () => {
     const total = morningBlock + afternoonBlock;
     let debt = 0;
     let credit = 0;
-    if (total < WORK_DURATION_MIN) {
-      debt = WORK_DURATION_MIN - total;
-    } else if (total > WORK_DURATION_MIN) {
-      credit = total - WORK_DURATION_MIN;
+    if (total < WORK_DURATION_MIN + permitDuration) {
+      debt = WORK_DURATION_MIN + permitDuration - total;
+    } else if (total > WORK_DURATION_MIN + permitDuration) {
+      credit = total - (WORK_DURATION_MIN + permitDuration);
     }
     setCalculated({ total, debt, credit });
   };
@@ -369,7 +387,11 @@ const WorkTimeTracker = () => {
       {/* Ipotesi orario uscita */}
       {exitHypothesis && (
         <div className="mt-2 p-2 bg-blue-100 rounded text-blue-900 text-sm font-semibold">
-          Ipotesi orario uscita per {pauseNoExit ? "7h12m + 30min pausa" : "7h12m"}: <strong>{exitHypothesis}</strong>
+          Ipotesi orario uscita per {pauseNoExit ? "7h12m + 30min pausa" : "7h12m"}
+          {usedPermit && getPermitDuration() > 0
+            ? ` + permesso (${Math.round(getPermitDuration())} min)`
+            : ""}
+          : <strong>{exitHypothesis}</strong>
         </div>
       )}
 
