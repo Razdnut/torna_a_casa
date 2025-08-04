@@ -194,12 +194,12 @@ const WorkTimeTracker = () => {
     });
 
     const finalOutDate = parseTime(finalOut);
-    const calculatedFinalOutDate = calculatedFinalOut ? parseTime(calculatedFinalOut) : null;
+    const calcFinalOutDate = calculatedFinalOut ? parseTime(calculatedFinalOut) : null;
 
     if (finalOutDate) {
       timesExits.push(finalOutDate);
-    } else if (calculatedFinalOutDate) {
-      timesExits.push(calculatedFinalOutDate);
+    } else if (calcFinalOutDate) {
+      timesExits.push(calcFinalOutDate);
     }
 
     timesEntrances.sort((a, b) => a.getTime() - b.getTime());
@@ -237,7 +237,7 @@ const WorkTimeTracker = () => {
     let creditMins = 0;
     let debtMins = 0;
 
-    if (morningInDate && (finalOutDate || calculatedFinalOutDate || timesExits.length > 0)) {
+    if (morningInDate && (finalOutDate || calcFinalOutDate || timesExits.length > 0)) {
       if (effectiveWorkMins < WORK_DURATION_MIN + lunchPauseMins) {
         debtMins = WORK_DURATION_MIN + lunchPauseMins - effectiveWorkMins;
       } else {
@@ -256,7 +256,7 @@ const WorkTimeTracker = () => {
 
     const showStats =
       morningInDate &&
-      (finalOutDate || calculatedFinalOutDate || timesExits.length > 0);
+      (finalOutDate || calcFinalOutDate || timesExits.length > 0);
 
   return (
     <div className="max-w-md mx-auto p-6 bg-white rounded-md shadow-md">
