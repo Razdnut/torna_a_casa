@@ -201,7 +201,6 @@ const WorkTimeTracker = () => {
 
   if (morningInDate) {
     if (finalOut) {
-      // Se uscita finale inserita, calcolo ore lavorate effettive
       if (lunchOutDate && lunchInDate) {
         const actualLunchPause = diffMinutes(lunchOutDate, lunchInDate);
         lunchPauseMins = actualLunchPause < 30 ? 30 : actualLunchPause;
@@ -211,7 +210,6 @@ const WorkTimeTracker = () => {
           diffMinutes(morningInDate, finalOutDate) - lunchPauseMins;
       }
     } else if (calculatedFinalOutDate) {
-      // Se uscita finale non inserita, mostro 7h12m
       totalWorkedMins = WORK_DURATION_MIN;
       lunchPauseMins = 30;
     }
@@ -221,6 +219,11 @@ const WorkTimeTracker = () => {
   const totalWorkedMinutes = Math.round(totalWorkedMins % 60);
 
   const extraLunchPause = lunchPauseMins > 30 ? lunchPauseMins - 30 : 0;
+
+  // Calcolo debito giornaliero se ore lavorate < 7h12m
+  const debtMins = totalWorkedMins < WORK_DURATION_MIN ? WORK_DURATION_MIN - totalWorkedMins : 0;
+  const debtHours = Math.floor(debtMins / 60);
+  const debtMinutes = Math.round(debtMins % 60);
 
   return (
     <div className="max-w-md mx-auto p-6 bg-white rounded-md shadow-md">
@@ -320,6 +323,11 @@ const WorkTimeTracker = () => {
           {extraLunchPause > 0 && (
             <p className="text-red-600">
               Minuti pausa extra da recuperare: <strong>{extraLunchPause}</strong>
+            </p>
+          )}
+          {debtMins > 0 && (
+            <p className="text-red-700 font-semibold">
+              Debito giornaliero: {debtHours}h {debtMinutes}m
             </p>
           )}
         </div>
