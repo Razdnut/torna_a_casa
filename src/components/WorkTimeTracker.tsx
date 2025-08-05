@@ -137,14 +137,18 @@ const WorkTimeTracker = () => {
     ) {
       // Ore lavorate mattina
       const morningBlock = diffMinutes(morningInDate, lunchOutDate);
+      // Pausa effettiva
+      const pausaEffettiva = diffMinutes(lunchOutDate, lunchInDate);
+      // Pausa considerata (minimo 30 min)
+      const pausaConsiderata = Math.max(pausaEffettiva, PAUSA_OBBLIGATORIA_MIN);
       // Ore da lavorare dopo pranzo
-      const remaining = WORK_DURATION_MIN - morningBlock + permitDuration;
-      if (remaining > 0) {
-        const exit = addMinutes(lunchInDate, remaining);
-        setExitHypothesis(formatTime(exit));
-      } else {
-        setExitHypothesis(formatTime(lunchInDate));
-      }
+      const remaining = WORK_DURATION_MIN - morningBlock;
+      // L'orario di uscita deve essere calcolato aggiungendo almeno 30 min di pausa
+      const exit = addMinutes(
+        lunchInDate,
+        remaining + (pausaConsiderata - pausaEffettiva) + permitDuration
+      );
+      setExitHypothesis(formatTime(exit));
     } else {
       setExitHypothesis(null);
     }
@@ -279,23 +283,30 @@ const WorkTimeTracker = () => {
     // Calcolo solo i due blocchi
     const morningBlock = diffMinutes(morningInDate, lunchOutDate);
     const afternoonBlock = diffMinutes(lunchInDate, finalOutDate);
+    // Pausa effettiva
+    const pausaEffettiva = diffMinutes(lunchOutDate, lunchInDate);
+    // Pausa considerata (minimo 30 min)
+    const pausaConsiderata = Math.max(pausaEffettiva, PAUSA_OBBLIGATORIA_MIN);
+    // Ore lavorate = mattina + pomeriggio
     const total = morningBlock + afternoonBlock;
+    // Ore lavorate effettive (sottraggo la pausa considerata)
+    const totalEffettivo = diffMinutes(morningInDate, finalOutDate) - pausaConsiderata;
     let debt = 0;
     let credit = 0;
-    if (total < WORK_DURATION_MIN + permitDuration) {
-      debt = WORK_DURATION_MIN + permitDuration - total;
-    } else if (total > WORK_DURATION_MIN + permitDuration) {
-      credit = total - (WORK_DURATION_MIN + permitDuration);
+    if (totalEffettivo < WORK_DURATION_MIN + permitDuration) {
+      debt = WORK_DURATION_MIN + permitDuration - totalEffettivo;
+    } else if (totalEffettivo > WORK_DURATION_MIN + permitDuration) {
+      credit = totalEffettivo - (WORK_DURATION_MIN + permitDuration);
     }
     // Ore lavorate effettive + permesso
-    const totalWithPermit = total + permitDuration;
+    const totalWithPermit = totalEffettivo + permitDuration;
     setCalculated({
-      total,
+      total: totalEffettivo,
       debt,
       credit,
       totalWithPermit,
       permitDuration,
-      totalRaw: total,
+      totalRaw: totalEffettivo,
       totalWithPermitIfReached: totalWithPermit,
       reachedWorkTime: false,
     });
