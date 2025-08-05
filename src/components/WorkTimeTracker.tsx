@@ -336,11 +336,25 @@ const WorkTimeTracker = () => {
     return calculated.total;
   }
 
+  // --- LOGICA MESSAGGIO PAUSA MINIMA ---
+  const showPausaMinimaMsg =
+    pauseNoExit ||
+    (!pauseNoExit &&
+      lunchDuration !== null &&
+      lunchDuration < PAUSA_OBBLIGATORIA_MIN);
+
   return (
     <div className="max-w-md mx-auto p-6 bg-white rounded-md shadow-md">
       <h2 className="text-2xl font-semibold mb-4 text-center">
         Monitoraggio Orario Lavoro
       </h2>
+
+      {showPausaMinimaMsg && (
+        <div className="mb-4 p-2 bg-blue-100 text-blue-900 rounded text-sm font-semibold">
+          Hai fatto una pausa pranzo di meno di 30 min ma questi verranno conteggiati lo stesso
+        </div>
+      )}
+
       <form
         onSubmit={(e) => {
           e.preventDefault();
