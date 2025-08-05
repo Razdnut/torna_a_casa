@@ -1,0 +1,8 @@
+version: '3.8'
+
+services:
+  tornacasa:
+    image: ghcr.io/razdnut/tornacasa:latest
+    ports:
+      - "8080:80"   # Mappa la porta 80 del container sulla porta 8080 del tuo host
+    restart: unless-stopped
