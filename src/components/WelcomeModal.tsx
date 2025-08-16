@@ -9,7 +9,7 @@ interface WelcomeModalProps {
 const WelcomeModal: React.FC<WelcomeModalProps> = ({ onProceed }) => {
   const [progress, setProgress] = useState(0);
   const [fadeOut, setFadeOut] = useState(false);
-  const intervalRef = useRef<NodeJS.Timeout | null>(null);
+  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   // Gestione avanzamento progress bar e chiusura automatica
   useEffect(() => {
