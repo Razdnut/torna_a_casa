@@ -351,7 +351,7 @@ const WorkTimeTracker = () => {
 
       {showPausaMinimaMsg && (
         <div className="mb-4 p-2 bg-blue-100 text-blue-900 rounded text-sm font-semibold">
-          Hai fatto una pausa pranzo di meno di 30 min ma questi verranno conteggiati lo stesso
+          Hai fatto una pausa pranzo inferiore a 30 min, ma verrà conteggiata comunque
         </div>
       )}
 
