@@ -35,3 +35,12 @@ L'applicazione sarà disponibile su `http://localhost:8080`.
 
 Per arrestare il container eseguire `docker compose down`.
 
+## APK
+
+Apk per android in release.
+
+<div align="left">
+
+  ![GitHub profile-details](http://github-profile-summary-cards.vercel.app/api/cards/profile-details?username=Razdnut&theme=material_palenight)
+
+</div>
