@@ -67,7 +67,13 @@ jobs:
       - name: Prepare APK for release
         shell: bash
         run: |
-          cp android/app/build/outputs/apk/release/app-release.apk android/app/build/outputs/apk/release/tornacasa.apk
+          shopt -s nullglob
+          apks=(android/app/build/outputs/apk/release/*.apk)
+          if [ ${#apks[@]} -eq 0 ]; then
+            echo "No APK found in android/app/build/outputs/apk/release"
+            exit 1
+          fi
+          cp "${apks[0]}" android/app/build/outputs/apk/release/tornacasa.apk
 
       - name: Create GitHub Release
         if: ${{ startsWith(github.ref, 'refs/tags/') || github.event.inputs.tag != '' }}
@@ -75,8 +81,6 @@ jobs:
         with:
           tag_name: ${{ github.event.inputs.tag != '' && github.event.inputs.tag || github.ref_name }}
           name: ${{ github.event.inputs.release_name != '' && github.event.inputs.release_name || format('Torna a Casa {0}', github.event.inputs.tag != '' && github.event.inputs.tag || github.ref_name) }}
-          files: |
-            android/app/build/outputs/apk/release/app-release.apk
-            android/app/build/outputs/apk/release/tornacasa.apk
+          files: android/app/build/outputs/apk/release/*.apk
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
