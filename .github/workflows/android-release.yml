@@ -4,6 +4,15 @@ permissions:
 
 on:
   workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Tag release da creare/aggiornare (es. 0.0.2 o lastest)'
+        required: false
+        type: string
+      release_name:
+        description: 'Titolo release (opzionale)'
+        required: false
+        type: string
   push:
     tags:
       - 'v*'
@@ -55,9 +64,19 @@ jobs:
           name: app-release
           path: android/app/build/outputs/apk/release/*.apk
 
+      - name: Prepare APK for release
+        shell: bash
+        run: |
+          cp android/app/build/outputs/apk/release/app-release.apk android/app/build/outputs/apk/release/tornacasa.apk
+
       - name: Create GitHub Release
+        if: ${{ startsWith(github.ref, 'refs/tags/') || github.event.inputs.tag != '' }}
         uses: softprops/action-gh-release@v2
         with:
-          files: android/app/build/outputs/apk/release/*.apk
+          tag_name: ${{ github.event.inputs.tag != '' && github.event.inputs.tag || github.ref_name }}
+          name: ${{ github.event.inputs.release_name != '' && github.event.inputs.release_name || format('Torna a Casa {0}', github.event.inputs.tag != '' && github.event.inputs.tag || github.ref_name) }}
+          files: |
+            android/app/build/outputs/apk/release/app-release.apk
+            android/app/build/outputs/apk/release/tornacasa.apk
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
