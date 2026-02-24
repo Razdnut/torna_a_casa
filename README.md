@@ -2,6 +2,8 @@
 
 Applicazione web/mobile per il calcolo degli orari di lavoro, la gestione delle pause pranzo e dei permessi dei dipendenti.
 
+NOTA: QUESTA APP È STATA CREATA IN VIBE CODING!
+
 ## Requisiti
 
 - [Node.js](https://nodejs.org/) e [pnpm](https://pnpm.io/) installati sulla macchina.
