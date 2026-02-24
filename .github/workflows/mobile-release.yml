@@ -1,0 +1,243 @@
+name: Mobile Release (APK + IPA)
+
+permissions:
+  contents: write
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Release tag (es. 0.0.3)"
+        required: true
+        default: "0.0.2"
+      release_title:
+        description: "Release title"
+        required: true
+        default: "Torna a Casa Mobile Release"
+      release_notes:
+        description: "Release notes (opzionale, markdown)"
+        required: false
+        default: ""
+
+jobs:
+  build-android:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "pnpm"
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build web assets
+        run: pnpm build
+
+      - name: Sync Capacitor Android
+        run: npx cap sync android
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: "temurin"
+          java-version: "17"
+          cache: "gradle"
+
+      - name: Build Android release APK
+        working-directory: android
+        run: |
+          chmod +x gradlew
+          ./gradlew assembleRelease --stacktrace
+
+      - name: Rename APK artifact
+        run: |
+          cp android/app/build/outputs/apk/release/app-release-unsigned.apk tornacasa.apk
+
+      - name: Upload APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: tornacasa-apk
+          path: tornacasa.apk
+
+  build-ios:
+    runs-on: macos-latest
+    env:
+      IOS_CERTIFICATE_BASE64: ${{ secrets.IOS_CERTIFICATE_BASE64 }}
+      IOS_CERTIFICATE_PASSWORD: ${{ secrets.IOS_CERTIFICATE_PASSWORD }}
+      IOS_PROVISION_PROFILE_BASE64: ${{ secrets.IOS_PROVISION_PROFILE_BASE64 }}
+      IOS_TEAM_ID: ${{ secrets.IOS_TEAM_ID }}
+
+    steps:
+      - name: Validate required iOS secrets
+        run: |
+          missing=()
+          [[ -z "$IOS_CERTIFICATE_BASE64" ]] && missing+=("IOS_CERTIFICATE_BASE64")
+          [[ -z "$IOS_CERTIFICATE_PASSWORD" ]] && missing+=("IOS_CERTIFICATE_PASSWORD")
+          [[ -z "$IOS_PROVISION_PROFILE_BASE64" ]] && missing+=("IOS_PROVISION_PROFILE_BASE64")
+          [[ -z "$IOS_TEAM_ID" ]] && missing+=("IOS_TEAM_ID")
+          if [ ${#missing[@]} -ne 0 ]; then
+            echo "Missing required secrets: ${missing[*]}"
+            exit 1
+          fi
+
+      - uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "pnpm"
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build web assets
+        run: pnpm build
+
+      - name: Sync Capacitor iOS
+        run: npx cap sync ios
+
+      - name: Install Apple signing certificate and provisioning profile
+        run: |
+          CERT_PATH="$RUNNER_TEMP/cert.p12"
+          PROFILE_PATH="$RUNNER_TEMP/profile.mobileprovision"
+          KEYCHAIN_PATH="$RUNNER_TEMP/signing.keychain-db"
+          KEYCHAIN_PASSWORD="$(openssl rand -base64 24)"
+
+          echo -n "$IOS_CERTIFICATE_BASE64" | base64 --decode > "$CERT_PATH"
+          echo -n "$IOS_PROVISION_PROFILE_BASE64" | base64 --decode > "$PROFILE_PATH"
+
+          security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          security set-keychain-settings -lut 21600 "$KEYCHAIN_PATH"
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          security import "$CERT_PATH" -P "$IOS_CERTIFICATE_PASSWORD" -A -t cert -f pkcs12 -k "$KEYCHAIN_PATH"
+          security list-keychain -d user -s "$KEYCHAIN_PATH"
+
+          mkdir -p "$HOME/Library/MobileDevice/Provisioning Profiles"
+          cp "$PROFILE_PATH" "$HOME/Library/MobileDevice/Provisioning Profiles/profile.mobileprovision"
+
+      - name: Archive iOS app
+        run: |
+          ARCHIVE_PATH="$RUNNER_TEMP/App.xcarchive"
+          xcodebuild \
+            -workspace ios/App/App.xcworkspace \
+            -scheme App \
+            -configuration Release \
+            -destination "generic/platform=iOS" \
+            -archivePath "$ARCHIVE_PATH" \
+            DEVELOPMENT_TEAM="$IOS_TEAM_ID" \
+            -allowProvisioningUpdates \
+            clean archive
+
+      - name: Export signed IPA (ad-hoc)
+        run: |
+          ARCHIVE_PATH="$RUNNER_TEMP/App.xcarchive"
+          EXPORT_PATH="$RUNNER_TEMP/export"
+          EXPORT_OPTIONS="$RUNNER_TEMP/ExportOptions.plist"
+
+          cat > "$EXPORT_OPTIONS" <<EOF
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0">
+          <dict>
+            <key>method</key>
+            <string>ad-hoc</string>
+            <key>signingStyle</key>
+            <string>automatic</string>
+            <key>teamID</key>
+            <string>${IOS_TEAM_ID}</string>
+            <key>stripSwiftSymbols</key>
+            <true/>
+            <key>compileBitcode</key>
+            <false/>
+          </dict>
+          </plist>
+          EOF
+
+          xcodebuild \
+            -exportArchive \
+            -archivePath "$ARCHIVE_PATH" \
+            -exportPath "$EXPORT_PATH" \
+            -exportOptionsPlist "$EXPORT_OPTIONS" \
+            -allowProvisioningUpdates
+
+          mv "$EXPORT_PATH/App.ipa" "$GITHUB_WORKSPACE/tornacasa.ipa"
+
+      - name: Upload IPA artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: tornacasa-ipa
+          path: tornacasa.ipa
+
+  publish-release:
+    runs-on: ubuntu-latest
+    needs: [build-android, build-ios]
+
+    steps:
+      - name: Download APK artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: tornacasa-apk
+          path: release-assets
+
+      - name: Download IPA artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: tornacasa-ipa
+          path: release-assets
+
+      - name: Prepare release notes
+        env:
+          INPUT_NOTES: ${{ github.event.inputs.release_notes }}
+        run: |
+          if [ -n "$INPUT_NOTES" ]; then
+            printf "%s\n" "$INPUT_NOTES" > RELEASE_NOTES.md
+          else
+            cat > RELEASE_NOTES.md <<'EOF'
+          ## Torna a Casa - Mobile Release
+
+          Questa release include i build mobili aggiornati:
+          - `tornacasa.apk` (Android)
+          - `tornacasa.ipa` (iOS signed ad-hoc)
+
+          ### Contenuto
+          - Build web aggiornato e sincronizzato su Capacitor
+          - Build Android release APK
+          - Build iOS signed ed esportato in formato IPA
+          - Pubblicazione automatica asset su GitHub Release
+          EOF
+          fi
+
+      - name: Create or update GitHub release
+        env:
+          TAG: ${{ github.event.inputs.tag }}
+          TITLE: ${{ github.event.inputs.release_title }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release edit "$TAG" --title "$TITLE" --notes-file RELEASE_NOTES.md --latest
+          else
+            gh release create "$TAG" --title "$TITLE" --notes-file RELEASE_NOTES.md --latest
+          fi
+
+      - name: Upload APK + IPA to release
+        env:
+          TAG: ${{ github.event.inputs.tag }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release upload "$TAG" release-assets/tornacasa.apk release-assets/tornacasa.ipa --clobber
