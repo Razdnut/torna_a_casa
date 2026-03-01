@@ -6,15 +6,16 @@ import {
 } from "@capacitor-community/sqlite";
 import { WorkDayEntry, WorkDayRecord } from "@/types/worklog";
 
-const DAYS_STORAGE_KEY = "worklog:v1:days";
-const SETTINGS_STORAGE_KEY = "worklog:v1:settings";
-const AUTO_SAVE_KEY = "auto_save";
+const LEGACY_DAYS_STORAGE_KEY = "worklog:v1:days";
+const LEGACY_SETTINGS_STORAGE_KEY = "worklog:v1:settings";
+const LEGACY_ENCRYPTION_SECRET_STORAGE_KEY = "worklog:v1:secret";
 
-const ENCRYPTION_SECRET_STORAGE_KEY = "worklog:v1:secret";
-const ENCRYPTION_PREFIX = "enc";
-const ENCRYPTION_VERSION = "v1";
-const ENCRYPTION_SALT = "worklog-storage-salt-v1";
-const ENCRYPTION_ITERATIONS = 150000;
+const LEGACY_ENCRYPTION_PREFIX = "enc";
+const LEGACY_ENCRYPTION_VERSION = "v1";
+const LEGACY_ENCRYPTION_SALT = "worklog-storage-salt-v1";
+const LEGACY_ENCRYPTION_ITERATIONS = 150000;
+
+const AUTO_SAVE_KEY = "auto_save";
 
 const DB_NAME = "worklog_db";
 const DB_VERSION = 1;
@@ -22,14 +23,14 @@ const DB_VERSION = 1;
 const CREATE_SCHEMA_SQL = `
 CREATE TABLE IF NOT EXISTS work_days (
   day_key TEXT PRIMARY KEY,
-  morning_in TEXT,
-  lunch_out TEXT,
-  lunch_in TEXT,
-  final_out TEXT,
+  morning_in TEXT NOT NULL DEFAULT '',
+  lunch_out TEXT NOT NULL DEFAULT '',
+  lunch_in TEXT NOT NULL DEFAULT '',
+  final_out TEXT NOT NULL DEFAULT '',
   pause_no_exit INTEGER NOT NULL DEFAULT 0,
   used_permit INTEGER NOT NULL DEFAULT 0,
-  permit_out TEXT,
-  permit_in TEXT,
+  permit_out TEXT NOT NULL DEFAULT '',
+  permit_in TEXT NOT NULL DEFAULT '',
   calculated_json TEXT,
   encrypted_payload TEXT,
   updated_at TEXT NOT NULL
@@ -44,19 +45,74 @@ CREATE INDEX IF NOT EXISTS idx_work_days_updated_at ON work_days(updated_at);
 `;
 
 type DbRow = Record<string, unknown>;
-type LocalDaysValue = string | WorkDayRecord;
-type LocalDaysMap = Record<string, LocalDaysValue>;
-type LocalSettingsMap = Record<string, string>;
 
 let sqliteConnection: SQLiteConnection | null = null;
 let dbConnection: SQLiteDBConnection | null = null;
-let encryptionKeyPromise: Promise<CryptoKey> | null = null;
+
+const webDaysStore = new Map<string, WorkDayRecord>();
+const webSettingsStore = new Map<string, string>();
+
+let legacyWebStorageCleared = false;
 
 const textEncoder = new TextEncoder();
 const textDecoder = new TextDecoder();
 
 function isNativePlatform(): boolean {
   return Capacitor.getPlatform() !== "web";
+}
+
+function clearLegacyWebStorage(): void {
+  if (legacyWebStorageCleared) {
+    return;
+  }
+
+  localStorage.removeItem(LEGACY_DAYS_STORAGE_KEY);
+  localStorage.removeItem(LEGACY_SETTINGS_STORAGE_KEY);
+  localStorage.removeItem(LEGACY_ENCRYPTION_SECRET_STORAGE_KEY);
+
+  legacyWebStorageCleared = true;
+}
+
+function normalizeRecord(record: WorkDayRecord): WorkDayRecord {
+  return {
+    ...record,
+    updatedAt: record.updatedAt || new Date().toISOString(),
+  };
+}
+
+function mapPlainRowToRecord(row: DbRow): WorkDayRecord {
+  const calculatedRaw = row.calculated_json;
+
+  return normalizeRecord({
+    morningIn: String(row.morning_in ?? ""),
+    lunchOut: String(row.lunch_out ?? ""),
+    lunchIn: String(row.lunch_in ?? ""),
+    finalOut: String(row.final_out ?? ""),
+    pauseNoExit: Number(row.pause_no_exit ?? 0) === 1,
+    usedPermit: Number(row.used_permit ?? 0) === 1,
+    permitOut: String(row.permit_out ?? ""),
+    permitIn: String(row.permit_in ?? ""),
+    calculated:
+      typeof calculatedRaw === "string" && calculatedRaw.length > 0
+        ? (JSON.parse(calculatedRaw) as WorkDayRecord["calculated"])
+        : null,
+    updatedAt: String(row.updated_at ?? new Date().toISOString()),
+  });
+}
+
+function entryToRecord(entry: WorkDayEntry): WorkDayRecord {
+  return {
+    morningIn: entry.morningIn,
+    lunchOut: entry.lunchOut,
+    lunchIn: entry.lunchIn,
+    finalOut: entry.finalOut,
+    pauseNoExit: entry.pauseNoExit,
+    usedPermit: entry.usedPermit,
+    permitOut: entry.permitOut,
+    permitIn: entry.permitIn,
+    calculated: entry.calculated,
+    updatedAt: entry.updatedAt,
+  };
 }
 
 function bytesToBase64(bytes: Uint8Array): string {
@@ -76,94 +132,58 @@ function base64ToBytes(value: string): Uint8Array {
   return bytes;
 }
 
-function generateRandomSecret(): string {
-  const random = crypto.getRandomValues(new Uint8Array(32));
-  return bytesToBase64(random);
-}
-
-function getStorageSecret(): string {
-  const envSecret = import.meta.env.VITE_WORKLOG_STORAGE_SECRET;
-  if (envSecret && envSecret.length >= 16) {
-    return envSecret;
-  }
-
-  const existing = localStorage.getItem(ENCRYPTION_SECRET_STORAGE_KEY);
-  if (existing && existing.length >= 16) {
-    return existing;
-  }
-
-  const generated = generateRandomSecret();
-  localStorage.setItem(ENCRYPTION_SECRET_STORAGE_KEY, generated);
-  return generated;
-}
-
-async function getEncryptionKey(): Promise<CryptoKey> {
-  if (!encryptionKeyPromise) {
-    encryptionKeyPromise = (async () => {
-      const secret = getStorageSecret();
-      const keyMaterial = await crypto.subtle.importKey(
-        "raw",
-        textEncoder.encode(secret),
-        "PBKDF2",
-        false,
-        ["deriveKey"],
-      );
-
-      return crypto.subtle.deriveKey(
-        {
-          name: "PBKDF2",
-          salt: textEncoder.encode(ENCRYPTION_SALT),
-          iterations: ENCRYPTION_ITERATIONS,
-          hash: "SHA-256",
-        },
-        keyMaterial,
-        {
-          name: "AES-GCM",
-          length: 256,
-        },
-        false,
-        ["encrypt", "decrypt"],
-      );
-    })();
-  }
-
-  return encryptionKeyPromise;
-}
-
-function isEncryptedPayload(value: unknown): value is string {
+function isLegacyEncryptedPayload(value: unknown): value is string {
   return (
     typeof value === "string" &&
-    value.startsWith(`${ENCRYPTION_PREFIX}:${ENCRYPTION_VERSION}:`)
+    value.startsWith(`${LEGACY_ENCRYPTION_PREFIX}:${LEGACY_ENCRYPTION_VERSION}:`)
   );
 }
 
-async function encryptRecord(record: WorkDayRecord): Promise<string> {
-  const key = await getEncryptionKey();
-  const iv = crypto.getRandomValues(new Uint8Array(12));
-  const plaintext = textEncoder.encode(JSON.stringify(record));
-  const ciphertextBuffer = await crypto.subtle.encrypt(
-    { name: "AES-GCM", iv },
-    key,
-    plaintext,
-  );
-  const ciphertext = new Uint8Array(ciphertextBuffer);
+async function decryptLegacyPayload(payload: string): Promise<WorkDayRecord | null> {
+  if (!isLegacyEncryptedPayload(payload)) {
+    return null;
+  }
 
-  return `${ENCRYPTION_PREFIX}:${ENCRYPTION_VERSION}:${bytesToBase64(iv)}:${bytesToBase64(ciphertext)}`;
-}
+  const secret = localStorage.getItem(LEGACY_ENCRYPTION_SECRET_STORAGE_KEY);
+  if (!secret) {
+    return null;
+  }
 
-async function decryptRecord(payload: string): Promise<WorkDayRecord> {
   const parts = payload.split(":");
   if (
     parts.length !== 4 ||
-    parts[0] !== ENCRYPTION_PREFIX ||
-    parts[1] !== ENCRYPTION_VERSION
+    parts[0] !== LEGACY_ENCRYPTION_PREFIX ||
+    parts[1] !== LEGACY_ENCRYPTION_VERSION
   ) {
-    throw new Error("Encrypted payload format is invalid.");
+    return null;
   }
 
   const iv = base64ToBytes(parts[2]);
   const ciphertext = base64ToBytes(parts[3]);
-  const key = await getEncryptionKey();
+
+  const keyMaterial = await crypto.subtle.importKey(
+    "raw",
+    textEncoder.encode(secret),
+    "PBKDF2",
+    false,
+    ["deriveKey"],
+  );
+
+  const key = await crypto.subtle.deriveKey(
+    {
+      name: "PBKDF2",
+      salt: textEncoder.encode(LEGACY_ENCRYPTION_SALT),
+      iterations: LEGACY_ENCRYPTION_ITERATIONS,
+      hash: "SHA-256",
+    },
+    keyMaterial,
+    {
+      name: "AES-GCM",
+      length: 256,
+    },
+    false,
+    ["decrypt"],
+  );
 
   const plaintextBuffer = await crypto.subtle.decrypt(
     { name: "AES-GCM", iv },
@@ -171,84 +191,27 @@ async function decryptRecord(payload: string): Promise<WorkDayRecord> {
     ciphertext,
   );
 
-  return JSON.parse(textDecoder.decode(plaintextBuffer)) as WorkDayRecord;
-}
-
-function normalizeRecord(record: WorkDayRecord): WorkDayRecord {
-  return {
-    ...record,
-    updatedAt: record.updatedAt || new Date().toISOString(),
-  };
-}
-
-function getLocalDaysMap(): LocalDaysMap {
-  const raw = localStorage.getItem(DAYS_STORAGE_KEY);
-  return raw ? (JSON.parse(raw) as LocalDaysMap) : {};
-}
-
-function setLocalDaysMap(data: LocalDaysMap): void {
-  localStorage.setItem(DAYS_STORAGE_KEY, JSON.stringify(data));
-}
-
-function getLocalSettingsMap(): LocalSettingsMap {
-  const raw = localStorage.getItem(SETTINGS_STORAGE_KEY);
-  return raw ? (JSON.parse(raw) as LocalSettingsMap) : {};
-}
-
-function setLocalSettingsMap(data: LocalSettingsMap): void {
-  localStorage.setItem(SETTINGS_STORAGE_KEY, JSON.stringify(data));
-}
-
-function mapLegacyRowToRecord(row: DbRow): WorkDayRecord {
-  const calculatedRaw = row.calculated_json;
-
-  return {
-    morningIn: String(row.morning_in ?? ""),
-    lunchOut: String(row.lunch_out ?? ""),
-    lunchIn: String(row.lunch_in ?? ""),
-    finalOut: String(row.final_out ?? ""),
-    pauseNoExit: Number(row.pause_no_exit ?? 0) === 1,
-    usedPermit: Number(row.used_permit ?? 0) === 1,
-    permitOut: String(row.permit_out ?? ""),
-    permitIn: String(row.permit_in ?? ""),
-    calculated:
-      typeof calculatedRaw === "string" && calculatedRaw.length > 0
-        ? (JSON.parse(calculatedRaw) as WorkDayRecord["calculated"])
-        : null,
-    updatedAt: String(row.updated_at ?? new Date().toISOString()),
-  };
+  const parsed = JSON.parse(textDecoder.decode(plaintextBuffer)) as WorkDayRecord;
+  return normalizeRecord(parsed);
 }
 
 async function mapDbRowToEntry(row: DbRow): Promise<WorkDayEntry> {
   const dayKey = String(row.day_key ?? "");
   const encryptedPayload = row.encrypted_payload;
 
-  if (isEncryptedPayload(encryptedPayload)) {
-    const record = await decryptRecord(encryptedPayload);
-    return {
-      dayKey,
-      ...normalizeRecord(record),
-    };
+  if (isLegacyEncryptedPayload(encryptedPayload)) {
+    const legacyRecord = await decryptLegacyPayload(encryptedPayload);
+    if (legacyRecord) {
+      return {
+        dayKey,
+        ...legacyRecord,
+      };
+    }
   }
 
   return {
     dayKey,
-    ...normalizeRecord(mapLegacyRowToRecord(row)),
-  };
-}
-
-function entryToRecord(entry: WorkDayEntry): WorkDayRecord {
-  return {
-    morningIn: entry.morningIn,
-    lunchOut: entry.lunchOut,
-    lunchIn: entry.lunchIn,
-    finalOut: entry.finalOut,
-    pauseNoExit: entry.pauseNoExit,
-    usedPermit: entry.usedPermit,
-    permitOut: entry.permitOut,
-    permitIn: entry.permitIn,
-    calculated: entry.calculated,
-    updatedAt: entry.updatedAt,
+    ...mapPlainRowToRecord(row),
   };
 }
 
@@ -263,6 +226,61 @@ async function ensureNativeSchema(db: SQLiteDBConnection): Promise<void> {
   if (!hasEncryptedPayloadColumn) {
     await db.execute("ALTER TABLE work_days ADD COLUMN encrypted_payload TEXT;");
   }
+}
+
+async function upsertPlainWorkDay(
+  db: SQLiteDBConnection,
+  dayKey: string,
+  record: WorkDayRecord,
+): Promise<void> {
+  const normalized = normalizeRecord(record);
+  const calculatedJson = normalized.calculated
+    ? JSON.stringify(normalized.calculated)
+    : null;
+
+  await db.run(
+    `
+    INSERT INTO work_days (
+      day_key,
+      morning_in,
+      lunch_out,
+      lunch_in,
+      final_out,
+      pause_no_exit,
+      used_permit,
+      permit_out,
+      permit_in,
+      calculated_json,
+      encrypted_payload,
+      updated_at
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?)
+    ON CONFLICT(day_key) DO UPDATE SET
+      morning_in = excluded.morning_in,
+      lunch_out = excluded.lunch_out,
+      lunch_in = excluded.lunch_in,
+      final_out = excluded.final_out,
+      pause_no_exit = excluded.pause_no_exit,
+      used_permit = excluded.used_permit,
+      permit_out = excluded.permit_out,
+      permit_in = excluded.permit_in,
+      calculated_json = excluded.calculated_json,
+      encrypted_payload = NULL,
+      updated_at = excluded.updated_at;
+    `,
+    [
+      dayKey,
+      normalized.morningIn,
+      normalized.lunchOut,
+      normalized.lunchIn,
+      normalized.finalOut,
+      normalized.pauseNoExit ? 1 : 0,
+      normalized.usedPermit ? 1 : 0,
+      normalized.permitOut,
+      normalized.permitIn,
+      calculatedJson,
+      normalized.updatedAt,
+    ],
+  );
 }
 
 async function migrateLegacyNativeRows(db: SQLiteDBConnection): Promise<void> {
@@ -281,41 +299,41 @@ async function migrateLegacyNativeRows(db: SQLiteDBConnection): Promise<void> {
       calculated_json,
       encrypted_payload,
       updated_at
-    FROM work_days
-    WHERE encrypted_payload IS NULL OR encrypted_payload = '';
+    FROM work_days;
     `,
   );
 
   const rows = (result.values ?? []) as DbRow[];
+
   for (const row of rows) {
     const dayKey = String(row.day_key ?? "");
-    const record = normalizeRecord(mapLegacyRowToRecord(row));
-    const encryptedPayload = await encryptRecord(record);
+    if (!dayKey) {
+      continue;
+    }
 
-    await db.run(
-      `
-      UPDATE work_days
-      SET
-        morning_in = '',
-        lunch_out = '',
-        lunch_in = '',
-        final_out = '',
-        pause_no_exit = 0,
-        used_permit = 0,
-        permit_out = '',
-        permit_in = '',
-        calculated_json = NULL,
-        encrypted_payload = ?,
-        updated_at = ?
-      WHERE day_key = ?;
-      `,
-      [encryptedPayload, record.updatedAt, dayKey],
-    );
+    let record: WorkDayRecord | null = mapPlainRowToRecord(row);
+
+    if (isLegacyEncryptedPayload(row.encrypted_payload)) {
+      const legacyRecord = await decryptLegacyPayload(row.encrypted_payload);
+      if (!legacyRecord) {
+        continue;
+      }
+      record = legacyRecord;
+    }
+
+    if (!record) {
+      continue;
+    }
+
+    await upsertPlainWorkDay(db, dayKey, record);
   }
+
+  clearLegacyWebStorage();
 }
 
 async function getNativeDb(): Promise<SQLiteDBConnection | null> {
   if (!isNativePlatform()) {
+    clearLegacyWebStorage();
     return null;
   }
 
@@ -344,21 +362,8 @@ async function getNativeDb(): Promise<SQLiteDBConnection | null> {
     await migrateLegacyNativeRows(dbConnection);
   }
 
+  clearLegacyWebStorage();
   return dbConnection;
-}
-
-async function decodeLocalDaysValue(
-  value: LocalDaysValue,
-): Promise<WorkDayRecord | null> {
-  if (isEncryptedPayload(value)) {
-    return normalizeRecord(await decryptRecord(value));
-  }
-
-  if (value && typeof value === "object") {
-    return normalizeRecord(value as WorkDayRecord);
-  }
-
-  return null;
 }
 
 export async function saveWorkDay(
@@ -366,47 +371,15 @@ export async function saveWorkDay(
   record: WorkDayRecord,
 ): Promise<void> {
   const normalized = normalizeRecord(record);
-  const encryptedPayload = await encryptRecord(normalized);
   const db = await getNativeDb();
 
   if (db) {
-    await db.run(
-      `
-      INSERT INTO work_days (
-        day_key,
-        morning_in,
-        lunch_out,
-        lunch_in,
-        final_out,
-        pause_no_exit,
-        used_permit,
-        permit_out,
-        permit_in,
-        calculated_json,
-        encrypted_payload,
-        updated_at
-      ) VALUES (?, '', '', '', '', 0, 0, '', '', NULL, ?, ?)
-      ON CONFLICT(day_key) DO UPDATE SET
-        morning_in = '',
-        lunch_out = '',
-        lunch_in = '',
-        final_out = '',
-        pause_no_exit = 0,
-        used_permit = 0,
-        permit_out = '',
-        permit_in = '',
-        calculated_json = NULL,
-        encrypted_payload = excluded.encrypted_payload,
-        updated_at = excluded.updated_at;
-      `,
-      [dayKey, encryptedPayload, normalized.updatedAt],
-    );
+    await upsertPlainWorkDay(db, dayKey, normalized);
     return;
   }
 
-  const days = getLocalDaysMap();
-  days[dayKey] = encryptedPayload;
-  setLocalDaysMap(days);
+  clearLegacyWebStorage();
+  webDaysStore.set(dayKey, normalized);
 }
 
 export async function loadWorkDay(dayKey: string): Promise<WorkDayRecord | null> {
@@ -441,31 +414,15 @@ export async function loadWorkDay(dayKey: string): Promise<WorkDayRecord | null>
 
     const entry = await mapDbRowToEntry(row);
 
-    if (!isEncryptedPayload(row.encrypted_payload)) {
-      await saveWorkDay(dayKey, entryToRecord(entry));
+    if (isLegacyEncryptedPayload(row.encrypted_payload)) {
+      await upsertPlainWorkDay(db, dayKey, entryToRecord(entry));
     }
 
     return entryToRecord(entry);
   }
 
-  const days = getLocalDaysMap();
-  const rawValue = days[dayKey];
-
-  if (rawValue === undefined) {
-    return null;
-  }
-
-  const record = await decodeLocalDaysValue(rawValue);
-  if (!record) {
-    return null;
-  }
-
-  if (!isEncryptedPayload(rawValue)) {
-    days[dayKey] = await encryptRecord(record);
-    setLocalDaysMap(days);
-  }
-
-  return record;
+  clearLegacyWebStorage();
+  return webDaysStore.get(dayKey) ?? null;
 }
 
 export async function listWorkDays(): Promise<WorkDayEntry[]> {
@@ -496,44 +453,26 @@ export async function listWorkDays(): Promise<WorkDayEntry[]> {
     const entries = await Promise.all(rows.map((row) => mapDbRowToEntry(row)));
 
     for (let index = 0; index < rows.length; index += 1) {
-      if (!isEncryptedPayload(rows[index].encrypted_payload)) {
-        await saveWorkDay(entries[index].dayKey, entryToRecord(entries[index]));
+      if (isLegacyEncryptedPayload(rows[index].encrypted_payload)) {
+        await upsertPlainWorkDay(
+          db,
+          entries[index].dayKey,
+          entryToRecord(entries[index]),
+        );
       }
     }
 
     return entries;
   }
 
-  const days = getLocalDaysMap();
-  const entries: WorkDayEntry[] = [];
-  let mapWasUpdated = false;
+  clearLegacyWebStorage();
 
-  const sorted = Object.entries(days).sort(([dayA], [dayB]) =>
-    dayA < dayB ? 1 : -1,
-  );
-
-  for (const [dayKey, value] of sorted) {
-    const record = await decodeLocalDaysValue(value);
-    if (!record) {
-      continue;
-    }
-
-    entries.push({
+  return Array.from(webDaysStore.entries())
+    .sort(([dayA], [dayB]) => (dayA < dayB ? 1 : -1))
+    .map(([dayKey, record]) => ({
       dayKey,
-      ...record,
-    });
-
-    if (!isEncryptedPayload(value)) {
-      days[dayKey] = await encryptRecord(record);
-      mapWasUpdated = true;
-    }
-  }
-
-  if (mapWasUpdated) {
-    setLocalDaysMap(days);
-  }
-
-  return entries;
+      ...normalizeRecord(record),
+    }));
 }
 
 export async function listSavedDayKeys(): Promise<string[]> {
@@ -558,8 +497,8 @@ export async function getAutoSaveEnabled(): Promise<boolean> {
     return value === "1";
   }
 
-  const settings = getLocalSettingsMap();
-  return settings[AUTO_SAVE_KEY] === "1";
+  clearLegacyWebStorage();
+  return webSettingsStore.get(AUTO_SAVE_KEY) === "1";
 }
 
 export async function setAutoSaveEnabled(value: boolean): Promise<void> {
@@ -578,9 +517,8 @@ export async function setAutoSaveEnabled(value: boolean): Promise<void> {
     return;
   }
 
-  const settings = getLocalSettingsMap();
-  settings[AUTO_SAVE_KEY] = serialized;
-  setLocalSettingsMap(settings);
+  clearLegacyWebStorage();
+  webSettingsStore.set(AUTO_SAVE_KEY, serialized);
 }
 
 export async function clearAllWorklogData(): Promise<void> {
@@ -591,10 +529,9 @@ export async function clearAllWorklogData(): Promise<void> {
       DELETE FROM work_days;
       DELETE FROM app_settings;
     `);
-    return;
   }
 
-  localStorage.removeItem(DAYS_STORAGE_KEY);
-  localStorage.removeItem(SETTINGS_STORAGE_KEY);
-  localStorage.removeItem(ENCRYPTION_SECRET_STORAGE_KEY);
+  webDaysStore.clear();
+  webSettingsStore.clear();
+  clearLegacyWebStorage();
 }
