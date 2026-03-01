@@ -1,7 +1,7 @@
 <?xml version='1.0' encoding='utf-8'?>
 <resources>
-    <string name="app_name">radiant-kookaburra-swim</string>
-    <string name="title_activity_main">radiant-kookaburra-swim</string>
-    <string name="package_name">com.example.radiantkookaburraswim</string>
-    <string name="custom_url_scheme">com.example.radiantkookaburraswim</string>
+    <string name="app_name">Torna a casa</string>
+    <string name="title_activity_main">Torna a casa</string>
+    <string name="package_name">com.tornaacasa.app</string>
+    <string name="custom_url_scheme">com.tornaacasa.app</string>
 </resources>

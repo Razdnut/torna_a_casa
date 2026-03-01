@@ -1,5 +1,4 @@
 import { useState } from "react";
-import { MadeWithDyad } from "@/components/made-with-dyad";
 import WelcomeModal from "@/components/WelcomeModal";
 import PageList from "@/components/PageList";
 
@@ -18,7 +17,6 @@ const Index = () => {
             calendario.
           </p>
           <PageList />
-          <MadeWithDyad />
         </div>
       )}
     </div>

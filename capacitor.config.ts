@@ -1,8 +1,8 @@
 import type { CapacitorConfig } from '@capacitor/cli';
 
 const config: CapacitorConfig = {
-  appId: 'com.example.radiantkookaburraswim',
-  appName: 'radiant-kookaburra-swim',
+  appId: 'com.tornaacasa.app',
+  appName: 'Torna a casa',
   webDir: 'dist'
 };
 

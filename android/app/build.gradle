@@ -12,10 +12,10 @@ if (keystorePropertiesFile.exists()) {
 }
 
 android {
-    namespace "com.example.radiantkookaburraswim"
+    namespace "com.tornaacasa.app"
     compileSdk rootProject.ext.compileSdkVersion
     defaultConfig {
-        applicationId "com.example.radiantkookaburraswim"
+        applicationId "com.tornaacasa.app"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
         versionCode 2
