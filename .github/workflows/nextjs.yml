@@ -1,4 +1,3 @@
-# Deploy Next.js (static export) to GitHub Pages using pnpm
 name: Deploy Next.js site to Pages
 
 on:
@@ -18,6 +17,7 @@ concurrency:
 jobs:
   build:
     runs-on: ubuntu-latest
+
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -25,9 +25,10 @@ jobs:
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
-          node-version: "20"
+          node-version: 20
           cache: "pnpm"
-          
+
+      # 👇 QUESTA È LA PARTE CHE TI MANCAVA
       - name: Enable Corepack
         run: corepack enable
 
@@ -37,31 +38,13 @@ jobs:
       - name: Setup Pages
         uses: actions/configure-pages@v5
         with:
-          # Inject basePath + disable image optimization for GitHub Pages
           static_site_generator: next
-
-      - name: Restore Next.js cache
-        uses: actions/cache@v4
-        with:
-          path: .next/cache
-          key: ${{ runner.os }}-nextjs-${{ hashFiles('**/pnpm-lock.yaml') }}-${{ hashFiles('**/*.[jt]s', '**/*.[jt]sx', '**/*.[mc][jt]s', '**/*.[mc][jt]sx') }}
-          restore-keys: |
-            ${{ runner.os }}-nextjs-${{ hashFiles('**/pnpm-lock.yaml') }}-
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      # --- BUILD/EXPORT ---
-      # Opzione A (Next 13.3+/14): next.config.js con output: "export"
       - name: Build
         run: pnpm next build
-
-      # Opzione B (Next <= 13 o se non usi output:"export"):
-      # scommenta queste due righe e commenta "Build" sopra
-      # - name: Build
-      #   run: pnpm next build
-      # - name: Export
-      #   run: pnpm next export
 
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
@@ -74,7 +57,8 @@ jobs:
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
+
     steps:
-      - name: Deploy to GitHub Pages
+      - name: Deploy
         id: deployment
         uses: actions/deploy-pages@v4
