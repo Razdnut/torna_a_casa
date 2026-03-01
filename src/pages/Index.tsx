@@ -1,5 +1,4 @@
-import React, { useState } from "react";
-import { MadeWithDyad } from "@/components/made-with-dyad";
+import { useState } from "react";
 import WorkTimeTracker from "@/components/WorkTimeTracker";
 import WelcomeModal from "@/components/WelcomeModal";
 
@@ -15,7 +14,6 @@ const Index = () => {
         <>
           <h1 className="text-4xl font-bold mb-6">Monitoraggio Orario Lavoro</h1>
           <WorkTimeTracker />
-          <MadeWithDyad />
         </>
       )}
     </div>
