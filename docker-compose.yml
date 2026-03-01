@@ -2,7 +2,7 @@ version: '3.8'
 
 services:
   tornacasa:
-    image: ghcr.io/razdnut/tornacasa:latest
+    image: "ghcr.io/razdnut/tornacasa@${TORNACASA_IMAGE_DIGEST:?Set TORNACASA_IMAGE_DIGEST to a trusted sha256 digest}"
     ports:
       - "8080:80"   # Mappa la porta 80 del container sulla porta 8080 del tuo host
     restart: unless-stopped

@@ -51,6 +51,31 @@ jobs:
           java-version: '21'
           cache: 'gradle'
 
+      - name: Prepare Android signing files
+        shell: bash
+        env:
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          required_vars=(ANDROID_KEYSTORE_BASE64 ANDROID_KEYSTORE_PASSWORD ANDROID_KEY_ALIAS ANDROID_KEY_PASSWORD)
+          for var_name in "${required_vars[@]}"; do
+            if [ -z "${!var_name}" ]; then
+              echo "Missing required signing secret: ${var_name}"
+              exit 1
+            fi
+          done
+
+          echo "${ANDROID_KEYSTORE_BASE64}" | base64 --decode > android/app/release-keystore.jks
+
+          {
+            echo "storeFile=release-keystore.jks"
+            echo "storePassword=${ANDROID_KEYSTORE_PASSWORD}"
+            echo "keyAlias=${ANDROID_KEY_ALIAS}"
+            echo "keyPassword=${ANDROID_KEY_PASSWORD}"
+          } > android/app/keystore.properties
+
       - name: Grant execute permission for gradlew
         run: chmod +x android/gradlew
 
@@ -58,22 +83,23 @@ jobs:
         working-directory: android
         run: ./gradlew assembleRelease --stacktrace
 
-      - name: Upload APK artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: app-release
-          path: android/app/build/outputs/apk/release/*.apk
-
-      - name: Prepare APK for release
+      - name: Prepare signed APK for distribution
         shell: bash
         run: |
-          shopt -s nullglob
-          apks=(android/app/build/outputs/apk/release/*.apk)
-          if [ ${#apks[@]} -eq 0 ]; then
-            echo "No APK found in android/app/build/outputs/apk/release"
+          signed_apk="android/app/build/outputs/apk/release/app-release.apk"
+          if [ ! -f "${signed_apk}" ]; then
+            echo "Signed APK not found at ${signed_apk}"
+            ls -la android/app/build/outputs/apk/release || true
             exit 1
           fi
-          cp "${apks[0]}" android/app/build/outputs/apk/release/tornacasa.apk
+
+          cp "${signed_apk}" android/app/build/outputs/apk/release/tornacasa.apk
+
+      - name: Upload signed APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: app-release-signed
+          path: android/app/build/outputs/apk/release/tornacasa.apk
 
       - name: Create GitHub Release
         if: ${{ startsWith(github.ref, 'refs/tags/') || github.event.inputs.tag != '' }}
@@ -81,6 +107,6 @@ jobs:
         with:
           tag_name: ${{ github.event.inputs.tag != '' && github.event.inputs.tag || github.ref_name }}
           name: ${{ github.event.inputs.release_name != '' && github.event.inputs.release_name || format('Torna a Casa {0}', github.event.inputs.tag != '' && github.event.inputs.tag || github.ref_name) }}
-          files: android/app/build/outputs/apk/release/*.apk
+          files: android/app/build/outputs/apk/release/tornacasa.apk
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

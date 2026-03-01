@@ -582,3 +582,19 @@ export async function setAutoSaveEnabled(value: boolean): Promise<void> {
   settings[AUTO_SAVE_KEY] = serialized;
   setLocalSettingsMap(settings);
 }
+
+export async function clearAllWorklogData(): Promise<void> {
+  const db = await getNativeDb();
+
+  if (db) {
+    await db.execute(`
+      DELETE FROM work_days;
+      DELETE FROM app_settings;
+    `);
+    return;
+  }
+
+  localStorage.removeItem(DAYS_STORAGE_KEY);
+  localStorage.removeItem(SETTINGS_STORAGE_KEY);
+  localStorage.removeItem(ENCRYPTION_SECRET_STORAGE_KEY);
+}

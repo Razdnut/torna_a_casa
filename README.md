@@ -21,13 +21,30 @@ Per una build di produzione eseguire `pnpm build` e lanciare l'anteprima con `pn
 
 Il repository include una GitHub Action per creare automaticamente l'APK di release.
 
-1. Genera una nuova release eseguendo `git tag v1.0.0 && git push origin v1.0.0` oppure avviando manualmente il workflow **Android Release** dalla sezione *Actions*.
-2. Scarica l'APK dagli artefatti del workflow o dalla pagina della release su GitHub.
-3. Copia il file sul dispositivo Android, abilita l'installazione da **origini sconosciute** e apri l'APK per installare l'app.
+1. Configura i secret GitHub necessari per la firma:
+   - `ANDROID_KEYSTORE_BASE64`
+   - `ANDROID_KEYSTORE_PASSWORD`
+   - `ANDROID_KEY_ALIAS`
+   - `ANDROID_KEY_PASSWORD`
+2. Genera una nuova release eseguendo `git tag v1.0.0 && git push origin v1.0.0` oppure avviando manualmente il workflow **Android Release** dalla sezione *Actions*.
+3. Scarica l'APK dalla pagina della release o dagli artefatti del workflow.
+4. Copia il file sul dispositivo Android, abilita l'installazione da **origini sconosciute** e apri l'APK per installare l'app.
+
+### Nota sicurezza APK
+- Il workflow pubblica solo APK **firmati**.
+- Se i secret di firma non sono configurati, la build release viene bloccata.
 
 ## Deploy con Docker
 
-È possibile eseguire l'app in un container già pronto usando Docker Compose:
+È possibile eseguire l'app in un container già pronto usando Docker Compose.
+
+Prima dell'avvio, imposta il digest immutabile dell'immagine in `.env`:
+
+```sh
+TORNACASA_IMAGE_DIGEST=sha256:xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+```
+
+Poi avvia con:
 
 ```sh
 docker compose up -d

@@ -9,7 +9,11 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { getAutoSaveEnabled, setAutoSaveEnabled } from "@/lib/worklog-storage";
+import {
+  clearAllWorklogData,
+  getAutoSaveEnabled,
+  setAutoSaveEnabled,
+} from "@/lib/worklog-storage";
 import { showSuccess } from "@/utils/toast";
 
 const SettingsPage = () => {
@@ -23,6 +27,20 @@ const SettingsPage = () => {
     setAutoSave(checked);
     setAutoSaveEnabled(checked);
     showSuccess(checked ? "Autosalvataggio attivato" : "Autosalvataggio disattivato");
+  };
+
+  const handleClearAllData = async () => {
+    const confirmed = window.confirm(
+      "Vuoi eliminare tutti i dati locali salvati? Questa azione non è reversibile.",
+    );
+
+    if (!confirmed) {
+      return;
+    }
+
+    await clearAllWorklogData();
+    setAutoSave(false);
+    showSuccess("Tutti i dati locali sono stati eliminati");
   };
 
   return (
@@ -51,6 +69,15 @@ const SettingsPage = () => {
               Quando attivo, ogni modifica della giornata selezionata viene salvata
               automaticamente nel database locale.
             </p>
+
+            <div className="rounded-md border border-destructive/40 bg-destructive/5 p-3">
+              <p className="mb-3 text-sm text-destructive">
+                Elimina cronologia e impostazioni locali da questo dispositivo.
+              </p>
+              <Button variant="destructive" onClick={handleClearAllData}>
+                Elimina tutti i dati locali
+              </Button>
+            </div>
 
             <Button asChild className="w-full sm:w-auto">
               <Link to="/tracker">Vai al tracker</Link>

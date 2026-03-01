@@ -4,7 +4,7 @@ Questa release introduce un aggiornamento completo della supply-chain JavaScript
 
 ### APK
 - Asset: `tornacasa.apk`
-- Tipo: APK release **unsigned** (distribuzione GitHub)
+- Tipo: APK release **signed** (firma obbligatoria nella pipeline CI)
 
 ### Miglioramenti sicurezza
 - Audit dipendenze portato a **0 vulnerabilità note** (`pnpm audit`).
@@ -26,5 +26,5 @@ Questa release introduce un aggiornamento completo della supply-chain JavaScript
 - Build Android release completata con successo (`assembleRelease`).
 
 ### Note operative
-- È stato creato anche il tag alias `lastest` che punta allo stesso commit di `0.0.2`.
-- Se in futuro servirà pubblicazione Play Store, è richiesto signing release con keystore dedicato.
+- I rilasci pubblici non devono distribuire APK unsigned.
+- Se in futuro servirà pubblicazione Play Store, mantenere la firma release con keystore dedicato e protetto.
