@@ -1,11 +1,24 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useEffect, useState } from "react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
+import { WorkDayCalculated, WorkDayRecord } from "@/types/worklog";
+import { formatDayKey, isValidDayKey } from "@/lib/worklog-date";
+import {
+  getAutoSaveEnabled,
+  loadWorkDay,
+  saveWorkDay,
+  setAutoSaveEnabled,
+} from "@/lib/worklog-storage";
+import { showSuccess } from "@/utils/toast";
 
-type TimeString = string; // "HH:mm"
+type TimeString = string;
+
+interface WorkTimeTrackerProps {
+  initialDayKey?: string;
+}
 
 function parseTime(t: TimeString): Date | null {
   const [h, m] = t.split(":").map(Number);
@@ -38,47 +51,102 @@ function addMinutes(date: Date, mins: number): Date {
   return d;
 }
 
-const WORK_DURATION_MIN = 7 * 60 + 12; // 7h12m = 432 min
-const PAUSA_OBBLIGATORIA_MIN = 30; // 30 minuti pausa obbligatoria
-
-const OFFICE_OPEN = 7 * 60 + 30; // 7:30 in minuti
-const OFFICE_CLOSE = 19 * 60; // 19:00 in minuti
-const LUNCH_START = 12 * 60; // 12:00
-const LUNCH_END = 15 * 60; // 15:00
-
-function toMinutes(d: Date) {
+function toMinutes(d: Date): number {
   return d.getHours() * 60 + d.getMinutes();
 }
 
-const WorkTimeTracker = () => {
+function formatMinutesLabel(minutes: number): string {
+  return `${Math.floor(minutes / 60)}h ${Math.round(minutes % 60)}m`;
+}
+
+const WORK_DURATION_MIN = 7 * 60 + 12;
+const PAUSA_OBBLIGATORIA_MIN = 30;
+
+const OFFICE_OPEN = 7 * 60 + 30;
+const OFFICE_CLOSE = 19 * 60;
+const LUNCH_START = 12 * 60;
+const LUNCH_END = 15 * 60;
+
+const WorkTimeTracker: React.FC<WorkTimeTrackerProps> = ({ initialDayKey }) => {
+  const todayKey = formatDayKey(new Date());
+  const [dayKey, setDayKey] = useState<string>(
+    initialDayKey && isValidDayKey(initialDayKey) ? initialDayKey : todayKey,
+  );
+
   const [morningIn, setMorningIn] = useState<TimeString>("");
   const [lunchOut, setLunchOut] = useState<TimeString>("");
   const [lunchIn, setLunchIn] = useState<TimeString>("");
   const [finalOut, setFinalOut] = useState<TimeString>("");
   const [pauseNoExit, setPauseNoExit] = useState(false);
 
-  // Nuovi stati per permessi
   const [usedPermit, setUsedPermit] = useState(false);
   const [permitOut, setPermitOut] = useState<TimeString>("");
   const [permitIn, setPermitIn] = useState<TimeString>("");
 
-  const [calculated, setCalculated] = useState<{
-    total: number;
-    debt: number;
-    credit: number;
-    totalWithPermit: number;
-    permitDuration: number;
-    totalRaw: number;
-    totalWithPermitIfReached: number;
-    reachedWorkTime: boolean;
-  } | null>(null);
-
+  const [calculated, setCalculated] = useState<WorkDayCalculated | null>(null);
   const [lunchDuration, setLunchDuration] = useState<number | null>(null);
   const [exitHypothesis, setExitHypothesis] = useState<string | null>(null);
-
   const [error, setError] = useState<string | null>(null);
 
-  // Calcolo durata permesso
+  const [autoSave, setAutoSave] = useState(false);
+  const [dayLoaded, setDayLoaded] = useState(false);
+  const [lastSavedAt, setLastSavedAt] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (initialDayKey && isValidDayKey(initialDayKey)) {
+      setDayKey(initialDayKey);
+    }
+  }, [initialDayKey]);
+
+  useEffect(() => {
+    getAutoSaveEnabled().then((value) => setAutoSave(value));
+  }, []);
+
+  function applyRecord(record: WorkDayRecord | null) {
+    if (!record) {
+      setMorningIn("");
+      setLunchOut("");
+      setLunchIn("");
+      setFinalOut("");
+      setPauseNoExit(false);
+      setUsedPermit(false);
+      setPermitOut("");
+      setPermitIn("");
+      setCalculated(null);
+      setLunchDuration(null);
+      setExitHypothesis(null);
+      setError(null);
+      return;
+    }
+
+    setMorningIn(record.morningIn);
+    setLunchOut(record.lunchOut);
+    setLunchIn(record.lunchIn);
+    setFinalOut(record.finalOut);
+    setPauseNoExit(record.pauseNoExit);
+    setUsedPermit(record.usedPermit);
+    setPermitOut(record.permitOut);
+    setPermitIn(record.permitIn);
+    setCalculated(record.calculated);
+    setError(null);
+  }
+
+  useEffect(() => {
+    let active = true;
+    setDayLoaded(false);
+
+    loadWorkDay(dayKey).then((record) => {
+      if (!active) return;
+      applyRecord(record);
+      setLastSavedAt(record?.updatedAt ?? null);
+      setDayLoaded(true);
+    });
+
+    return () => {
+      active = false;
+    };
+  }, [dayKey]);
+
   function getPermitDuration(): number {
     if (!usedPermit) return 0;
     const out = parseTime(permitOut);
@@ -89,10 +157,63 @@ const WorkTimeTracker = () => {
     return 0;
   }
 
-  // Calcolo durata pausa pranzo
+  function buildRecord(): WorkDayRecord {
+    return {
+      morningIn,
+      lunchOut,
+      lunchIn,
+      finalOut,
+      pauseNoExit,
+      usedPermit,
+      permitOut,
+      permitIn,
+      calculated,
+      updatedAt: new Date().toISOString(),
+    };
+  }
+
+  async function handleSaveDay() {
+    const record = buildRecord();
+    await saveWorkDay(dayKey, record);
+    setLastSavedAt(record.updatedAt);
+    showSuccess(`Dati del ${dayKey} salvati`);
+  }
+
+  function handleAutoSaveToggle(value: boolean) {
+    setAutoSave(value);
+    setAutoSaveEnabled(value);
+    showSuccess(value ? "Autosalvataggio attivato" : "Autosalvataggio disattivato");
+  }
+
+  useEffect(() => {
+    if (!autoSave || !dayLoaded) return;
+
+    const timeout = setTimeout(() => {
+      const record = buildRecord();
+      saveWorkDay(dayKey, record);
+      setLastSavedAt(record.updatedAt);
+    }, 500);
+
+    return () => clearTimeout(timeout);
+  }, [
+    autoSave,
+    dayLoaded,
+    dayKey,
+    morningIn,
+    lunchOut,
+    lunchIn,
+    finalOut,
+    pauseNoExit,
+    usedPermit,
+    permitOut,
+    permitIn,
+    calculated,
+  ]);
+
   useEffect(() => {
     const lunchOutDate = parseTime(lunchOut);
     const lunchInDate = parseTime(lunchIn);
+
     if (
       !pauseNoExit &&
       lunchOutDate &&
@@ -105,19 +226,15 @@ const WorkTimeTracker = () => {
     }
   }, [lunchOut, lunchIn, pauseNoExit]);
 
-  // Calcolo ipotesi orario uscita
   useEffect(() => {
     const permitDuration = getPermitDuration();
 
     if (pauseNoExit) {
-      // Solo ingresso mattina richiesto
       const morningInDate = parseTime(morningIn);
       if (morningInDate) {
-        // 7h12m + 30min pausa obbligatoria = 7h42m = 462 min
-        // Se permesso, aggiungi la durata permesso
         const exit = addMinutes(
           morningInDate,
-          WORK_DURATION_MIN + PAUSA_OBBLIGATORIA_MIN + permitDuration
+          WORK_DURATION_MIN + PAUSA_OBBLIGATORIA_MIN + permitDuration,
         );
         setExitHypothesis(formatTime(exit));
       } else {
@@ -125,28 +242,24 @@ const WorkTimeTracker = () => {
       }
       return;
     }
-    // Pausa con uscita: servono i tre campi
+
     const morningInDate = parseTime(morningIn);
     const lunchOutDate = parseTime(lunchOut);
     const lunchInDate = parseTime(lunchIn);
+
     if (
       morningInDate &&
       lunchOutDate &&
       lunchInDate &&
       toMinutes(lunchInDate) > toMinutes(lunchOutDate)
     ) {
-      // Ore lavorate mattina
       const morningBlock = diffMinutes(morningInDate, lunchOutDate);
-      // Pausa effettiva
       const pausaEffettiva = diffMinutes(lunchOutDate, lunchInDate);
-      // Pausa considerata (minimo 30 min)
       const pausaConsiderata = Math.max(pausaEffettiva, PAUSA_OBBLIGATORIA_MIN);
-      // Ore da lavorare dopo pranzo
       const remaining = WORK_DURATION_MIN - morningBlock;
-      // L'orario di uscita deve essere calcolato aggiungendo almeno 30 min di pausa
       const exit = addMinutes(
         lunchInDate,
-        remaining + (pausaConsiderata - pausaEffettiva) + permitDuration
+        remaining + (pausaConsiderata - pausaEffettiva) + permitDuration,
       );
       setExitHypothesis(formatTime(exit));
     } else {
@@ -163,53 +276,54 @@ const WorkTimeTracker = () => {
     const finalOutDate = parseTime(finalOut);
     const permitDuration = getPermitDuration();
 
-    // Caso "pausa pranzo senza uscita"
     if (pauseNoExit) {
       if (!morningInDate) {
         setError("Compila almeno Ingresso Mattina.");
         setCalculated(null);
         return;
       }
-      // Se non c'è uscita finale, mostra solo ipotesi
+
       if (!finalOutDate) {
-        // Mostra solo ipotesi (già calcolata in blu)
         setCalculated(null);
         return;
       }
+
       if (toMinutes(morningInDate) < OFFICE_OPEN) {
         setError("L'orario di ingresso mattutino non può essere prima delle 7:30");
         setCalculated(null);
         return;
       }
+
       if (toMinutes(finalOutDate) > OFFICE_CLOSE) {
         setError("L'orario di uscita finale non può essere dopo le 19:00");
         setCalculated(null);
         return;
       }
+
       if (toMinutes(finalOutDate) <= toMinutes(morningInDate)) {
         setError("L'uscita finale deve essere dopo l'ingresso mattina");
         setCalculated(null);
         return;
       }
-      // Calcolo solo su Ingresso Mattina e Uscita Finale
-      // Il tempo richiesto è 7h12m + 30min pausa obbligatoria = 462 min (+ permesso)
+
       const totalRaw = diffMinutes(morningInDate, finalOutDate);
-      let total = totalRaw - PAUSA_OBBLIGATORIA_MIN; // SOTTRAI i 30 min di pausa obbligatoria
-      // Se entrambe le checkbox sono selezionate, togli sempre i 30 min
+      let total = totalRaw - PAUSA_OBBLIGATORIA_MIN;
+
       if (usedPermit && pauseNoExit) {
         total = totalRaw - PAUSA_OBBLIGATORIA_MIN;
       }
+
       let debt = 0;
       let credit = 0;
+
       if (totalRaw < WORK_DURATION_MIN + PAUSA_OBBLIGATORIA_MIN + permitDuration) {
         debt = WORK_DURATION_MIN + PAUSA_OBBLIGATORIA_MIN + permitDuration - totalRaw;
       } else if (totalRaw > WORK_DURATION_MIN + PAUSA_OBBLIGATORIA_MIN + permitDuration) {
         credit = totalRaw - (WORK_DURATION_MIN + PAUSA_OBBLIGATORIA_MIN + permitDuration);
       }
-      // Ore lavorate effettive + permesso (ma per visualizzazione, vedi sotto)
+
       const totalWithPermit = total + permitDuration;
 
-      // Nuovo: se entrambe le checkbox sono selezionate e il tempo effettivo (senza permesso) > 7h12m, somma anche la durata permesso
       let totalWithPermitIfReached = total;
       let reachedWorkTime = false;
       if (usedPermit && pauseNoExit) {
@@ -217,7 +331,7 @@ const WorkTimeTracker = () => {
           totalWithPermitIfReached = total + permitDuration;
           reachedWorkTime = true;
         } else if (total === WORK_DURATION_MIN) {
-          totalWithPermitIfReached = total; // NON sommare il permesso
+          totalWithPermitIfReached = total;
           reachedWorkTime = true;
         }
       }
@@ -235,70 +349,72 @@ const WorkTimeTracker = () => {
       return;
     }
 
-    // Caso normale (pausa pranzo con uscita)
     if (!morningInDate || !lunchOutDate || !lunchInDate) {
       setError("Compila tutti gli orari richiesti per il calcolo.");
       setCalculated(null);
       return;
     }
+
     if (!finalOutDate) {
       setCalculated(null);
       return;
     }
+
     if (toMinutes(morningInDate) < OFFICE_OPEN) {
       setError("L'orario di ingresso mattutino non può essere prima delle 7:30");
       setCalculated(null);
       return;
     }
+
     if (toMinutes(finalOutDate) > OFFICE_CLOSE) {
       setError("L'orario di uscita finale non può essere dopo le 19:00");
       setCalculated(null);
       return;
     }
+
     if (toMinutes(lunchOutDate) < LUNCH_START) {
       setError("La pausa pranzo può iniziare solo dalle 12:00");
       setCalculated(null);
       return;
     }
+
     if (toMinutes(lunchInDate) > LUNCH_END) {
       setError("Il rientro dalla pausa pranzo non può essere dopo le 15:00");
       setCalculated(null);
       return;
     }
+
     if (toMinutes(lunchInDate) <= toMinutes(lunchOutDate)) {
       setError("L'orario di rientro deve essere dopo l'uscita in pausa");
       setCalculated(null);
       return;
     }
+
     if (toMinutes(lunchOutDate) <= toMinutes(morningInDate)) {
       setError("L'uscita pausa pranzo deve essere dopo l'ingresso mattina");
       setCalculated(null);
       return;
     }
+
     if (toMinutes(finalOutDate) <= toMinutes(lunchInDate)) {
       setError("L'uscita finale deve essere dopo il rientro pausa pranzo");
       setCalculated(null);
       return;
     }
-    // Calcolo solo i due blocchi
-    const morningBlock = diffMinutes(morningInDate, lunchOutDate);
-    const afternoonBlock = diffMinutes(lunchInDate, finalOutDate);
-    // Pausa effettiva
+
     const pausaEffettiva = diffMinutes(lunchOutDate, lunchInDate);
-    // Pausa considerata (minimo 30 min)
     const pausaConsiderata = Math.max(pausaEffettiva, PAUSA_OBBLIGATORIA_MIN);
-    // Ore lavorate = mattina + pomeriggio
-    const total = morningBlock + afternoonBlock;
-    // Ore lavorate effettive (sottraggo la pausa considerata)
     const totalEffettivo = diffMinutes(morningInDate, finalOutDate) - pausaConsiderata;
+
     let debt = 0;
     let credit = 0;
+
     if (totalEffettivo < WORK_DURATION_MIN + permitDuration) {
       debt = WORK_DURATION_MIN + permitDuration - totalEffettivo;
     } else if (totalEffettivo > WORK_DURATION_MIN + permitDuration) {
       credit = totalEffettivo - (WORK_DURATION_MIN + permitDuration);
     }
-    // Ore lavorate effettive + permesso
+
     const totalWithPermit = totalEffettivo + permitDuration;
     setCalculated({
       total: totalEffettivo,
@@ -312,31 +428,26 @@ const WorkTimeTracker = () => {
     });
   };
 
-  // --- LOGICA VISUALIZZAZIONE ORE LAVORATE ---
   function getVisualWorkedMinutes() {
     if (!calculated) return 0;
-    // Caso: entrambe le checkbox selezionate e pausa senza uscita
+
     if (usedPermit && pauseNoExit) {
-      // Se raggiunto il tempo minimo, somma anche il permesso SOLO se il tempo effettivo è maggiore del minimo
       if (calculated.reachedWorkTime) {
         if (calculated.total > WORK_DURATION_MIN) {
           return calculated.total + calculated.permitDuration;
-        } else {
-          return calculated.total;
         }
-      } else {
         return calculated.total;
       }
+      return calculated.total;
     }
-    // Caso: permesso usato in modalità normale
+
     if (usedPermit && calculated.permitDuration > 0) {
       return calculated.totalWithPermit;
     }
-    // Caso base
+
     return calculated.total;
   }
 
-  // --- LOGICA MESSAGGIO PAUSA MINIMA ---
   const showPausaMinimaMsg =
     pauseNoExit ||
     (!pauseNoExit &&
@@ -344,82 +455,123 @@ const WorkTimeTracker = () => {
       lunchDuration < PAUSA_OBBLIGATORIA_MIN);
 
   return (
-    <div className="max-w-md mx-auto p-6 bg-white rounded-md shadow-md">
-      <h2 className="text-2xl font-semibold mb-4 text-center">
+    <div className="mx-auto w-full max-w-md rounded-md bg-white p-6 shadow-md">
+      <h2 className="mb-4 text-center text-2xl font-semibold">
         Monitoraggio Orario Lavoro
       </h2>
 
+      <div className="mb-4 grid gap-3 sm:grid-cols-2">
+        <div>
+          <label htmlFor="dayKey" className="mb-1 block font-medium">
+            Giorno
+          </label>
+          <Input
+            id="dayKey"
+            type="date"
+            value={dayKey}
+            onChange={(event) => setDayKey(event.target.value)}
+          />
+        </div>
+        <div className="flex items-end">
+          <Button onClick={handleSaveDay} className="w-full">
+            Salva giornata
+          </Button>
+        </div>
+      </div>
+
+      <div className="mb-4 flex items-center space-x-2">
+        <Checkbox
+          id="autoSave"
+          checked={autoSave}
+          onCheckedChange={(checked) => handleAutoSaveToggle(!!checked)}
+        />
+        <label htmlFor="autoSave" className="text-sm font-medium">
+          Autosalvataggio
+        </label>
+      </div>
+
+      {lastSavedAt && (
+        <div className="mb-4 rounded bg-gray-100 p-2 text-sm text-gray-700">
+          Ultimo salvataggio:{" "}
+          <strong>{new Date(lastSavedAt).toLocaleString("it-IT")}</strong>
+        </div>
+      )}
+
       {showPausaMinimaMsg && (
-        <div className="mb-4 p-2 bg-blue-100 text-blue-900 rounded text-sm font-semibold">
-          Hai fatto una pausa pranzo inferiore a 30 min, ma verrà conteggiata comunque
+        <div className="mb-4 rounded bg-blue-100 p-2 text-sm font-semibold text-blue-900">
+          Hai fatto una pausa pranzo inferiore a 30 min, ma verrà conteggiata
+          comunque
         </div>
       )}
 
       <form
-        onSubmit={(e) => {
-          e.preventDefault();
+        onSubmit={(event) => {
+          event.preventDefault();
         }}
         className="space-y-4"
       >
         <div>
-          <label htmlFor="morningIn" className="block font-medium mb-1">
+          <label htmlFor="morningIn" className="mb-1 block font-medium">
             Ingresso Mattina (es. 07:30)
           </label>
           <Input
             id="morningIn"
             type="time"
             value={morningIn}
-            onChange={(e) => setMorningIn(e.target.value)}
+            onChange={(event) => setMorningIn(event.target.value)}
             min="07:30"
             max="19:00"
             required
           />
         </div>
+
         <div>
-          <label htmlFor="lunchOut" className="block font-medium mb-1">
+          <label htmlFor="lunchOut" className="mb-1 block font-medium">
             Uscita Pausa Pranzo (es. 12:00)
           </label>
           <Input
             id="lunchOut"
             type="time"
             value={lunchOut}
-            onChange={(e) => setLunchOut(e.target.value)}
+            onChange={(event) => setLunchOut(event.target.value)}
             min="12:00"
             max="15:00"
             required={!pauseNoExit}
             disabled={pauseNoExit}
           />
         </div>
+
         <div>
-          <label htmlFor="lunchIn" className="block font-medium mb-1">
+          <label htmlFor="lunchIn" className="mb-1 block font-medium">
             Rientro Pausa Pranzo (es. 12:30)
           </label>
           <Input
             id="lunchIn"
             type="time"
             value={lunchIn}
-            onChange={(e) => setLunchIn(e.target.value)}
+            onChange={(event) => setLunchIn(event.target.value)}
             min="12:30"
             max="15:00"
             required={!pauseNoExit}
             disabled={pauseNoExit}
           />
         </div>
+
         <div>
-          <label htmlFor="finalOut" className="block font-medium mb-1">
+          <label htmlFor="finalOut" className="mb-1 block font-medium">
             Uscita Finale (opzionale)
           </label>
           <Input
             id="finalOut"
             type="time"
             value={finalOut}
-            onChange={(e) => setFinalOut(e.target.value)}
+            onChange={(event) => setFinalOut(event.target.value)}
             min="07:30"
             max="19:00"
-            required={false}
           />
         </div>
-        <div className="flex items-center space-x-2 mt-2">
+
+        <div className="mt-2 flex items-center space-x-2">
           <Checkbox
             id="pauseNoExit"
             checked={pauseNoExit}
@@ -429,7 +581,8 @@ const WorkTimeTracker = () => {
             Pausa pranzo senza uscita
           </label>
         </div>
-        <div className="flex items-center space-x-2 mt-2">
+
+        <div className="mt-2 flex items-center space-x-2">
           <Checkbox
             id="usedPermit"
             checked={usedPermit}
@@ -439,30 +592,31 @@ const WorkTimeTracker = () => {
             Hai usato permessi?
           </label>
         </div>
+
         {usedPermit && (
-          <div className="space-y-2 mt-2">
+          <div className="mt-2 space-y-2">
             <div>
-              <label htmlFor="permitOut" className="block font-medium mb-1">
+              <label htmlFor="permitOut" className="mb-1 block font-medium">
                 Orario uscita permesso
               </label>
               <Input
                 id="permitOut"
                 type="time"
                 value={permitOut}
-                onChange={(e) => setPermitOut(e.target.value)}
+                onChange={(event) => setPermitOut(event.target.value)}
                 min="07:30"
                 max="19:00"
               />
             </div>
             <div>
-              <label htmlFor="permitIn" className="block font-medium mb-1">
+              <label htmlFor="permitIn" className="mb-1 block font-medium">
                 Orario ingresso permesso
               </label>
               <Input
                 id="permitIn"
                 type="time"
                 value={permitIn}
-                onChange={(e) => setPermitIn(e.target.value)}
+                onChange={(event) => setPermitIn(event.target.value)}
                 min="07:30"
                 max="19:00"
               />
@@ -471,16 +625,14 @@ const WorkTimeTracker = () => {
         )}
       </form>
 
-      {/* Durata pausa pranzo */}
       {!pauseNoExit && lunchDuration !== null && (
-        <div className="mt-4 p-2 bg-gray-100 rounded text-blue-900 text-sm">
+        <div className="mt-4 rounded bg-gray-100 p-2 text-sm text-blue-900">
           Durata pausa pranzo: <strong>{Math.floor(lunchDuration)} minuti</strong>
         </div>
       )}
 
-      {/* Ipotesi orario uscita */}
       {exitHypothesis && (
-        <div className="mt-2 p-2 bg-blue-100 rounded text-blue-900 text-sm font-semibold">
+        <div className="mt-2 rounded bg-blue-100 p-2 text-sm font-semibold text-blue-900">
           Ipotesi orario uscita per {pauseNoExit ? "7h12m + 30min pausa" : "7h12m"}
           {usedPermit && getPermitDuration() > 0
             ? ` + permesso (${Math.round(getPermitDuration())} min)`
@@ -496,30 +648,28 @@ const WorkTimeTracker = () => {
       </div>
 
       {error && (
-        <div className="mt-4 p-3 bg-red-100 text-red-700 rounded">{error}</div>
+        <div className="mt-4 rounded bg-red-100 p-3 text-red-700">{error}</div>
       )}
 
       {calculated && (
         <div className="mt-4 space-y-2">
           <p>
             Ore lavorate (escluse pause):{" "}
-            <strong>
-              {(() => {
-                const min = getVisualWorkedMinutes();
-                return `${Math.floor(min / 60)}h ${Math.round(min % 60)}m`;
-              })()}
-            </strong>
+            <strong>{formatMinutesLabel(getVisualWorkedMinutes())}</strong>
           </p>
+
           {calculated.debt > 0 && (
             <p className="font-semibold text-red-700">
-              Debito giornaliero: {Math.floor(calculated.debt / 60)}h {Math.round(calculated.debt % 60)}m
+              Debito giornaliero: {formatMinutesLabel(calculated.debt)}
             </p>
           )}
+
           {calculated.credit > 0 && (
             <p className="font-semibold text-green-700">
-              Credito giornaliero: {Math.floor(calculated.credit / 60)}h {Math.round(calculated.credit % 60)}m
+              Credito giornaliero: {formatMinutesLabel(calculated.credit)}
             </p>
           )}
+
           {calculated.debt === 0 && calculated.credit === 0 && (
             <p className="font-semibold text-green-700">
               Nessun debito, giornata regolare!
