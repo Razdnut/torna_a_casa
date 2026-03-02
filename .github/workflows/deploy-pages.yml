@@ -31,7 +31,7 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 20
-          cache: 'pnpm'
+          cache: pnpm
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
@@ -39,51 +39,59 @@ jobs:
       - name: Build app
         run: pnpm exec vite build --base "/torna_a_casa/"
 
-      # PATCH 1 — Sistema il router senza modificare il codice sorgente
+      # PATCH 1 — Fix BrowserRouter on GitHub Pages without touching source code
       - name: Patch router base for GitHub Pages
         run: |
           node - <<'NODE'
           const fs = require('fs');
-          const path = 'dist/index.html';
-          let html = fs.readFileSync(path, 'utf8');
+
+          const file = 'dist/index.html';
+          let html = fs.readFileSync(file, 'utf8');
 
           const repo = '/torna_a_casa';
           const snippet = `
-<script>
-(function () {
-  var repo = '${repo}';
-  var p = window.location.pathname;
-  if (p.startsWith(repo + '/')) {
-    var newPath = p.slice(repo.length) || '/';
-    window.history.replaceState(null, '', newPath + window.location.search + window.location.hash);
-  }
-})();
-</script>`.trim() + "\n";
+          <script>
+          (function () {
+            var repo = '${repo}';
+            var p = window.location.pathname;
+            if (p.startsWith(repo + '/')) {
+              var newPath = p.slice(repo.length) || '/';
+              window.history.replaceState(null, '', newPath + window.location.search + window.location.hash);
+            }
+          })();
+          </script>
+          `;
 
-          if (!html.includes('var repo =')) {
-            html = html.replace('<head>', '<head>\n' + snippet);
-            fs.writeFileSync(path, html, 'utf8');
+          // Inject once, right after <head>
+          if (!html.includes("var repo = '/torna_a_casa'")) {
+            html = html.replace('<head>', '<head>\n' + snippet.trim() + '\n');
+            fs.writeFileSync(file, html, 'utf8');
           }
           NODE
 
+      # PATCH 2 — Avoid GitHub Pages 404 on refresh/deeplinks (redirect to app root)
       - name: Add GitHub Pages SPA 404 redirect
         run: |
-          echo '<!doctype html>
-<html>
-  <head>
-    <meta charset="utf-8" />
-    <script>
-      (function () {
-        var l = window.location;
-        var repo = "/torna_a_casa";
-        if (l.pathname.startsWith(repo + "/")) {
-          l.replace(repo + "/");
-        }
-      })();
-    </script>
-  </head>
-  <body></body>
-</html>' > dist/404.html
+          cat > dist/404.html <<'HTML'
+          <!doctype html>
+          <html>
+            <head>
+              <meta charset="utf-8" />
+              <script>
+                (function () {
+                  var l = window.location;
+                  var repo = '/torna_a_casa';
+                  if (l.pathname.startsWith(repo + '/')) {
+                    l.replace(repo + '/');
+                  } else {
+                    l.replace('/');
+                  }
+                })();
+              </script>
+            </head>
+            <body></body>
+          </html>
+          HTML
 
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v3
