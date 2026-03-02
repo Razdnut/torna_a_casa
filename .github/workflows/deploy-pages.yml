@@ -39,8 +39,53 @@ jobs:
       - name: Build app
         run: pnpm exec vite build --base "/torna_a_casa/"
 
-      - name: Add SPA fallback page
-        run: cp dist/index.html dist/404.html
+      # PATCH 1 — Sistema il router senza modificare il codice sorgente
+      - name: Patch router base for GitHub Pages
+        run: |
+          node - <<'NODE'
+          const fs = require('fs');
+          const path = 'dist/index.html';
+          let html = fs.readFileSync(path, 'utf8');
+
+          const repo = '/torna_a_casa';
+          const snippet = `
+<script>
+(function () {
+  var repo = '${repo}';
+  var p = window.location.pathname;
+  if (p.startsWith(repo + '/')) {
+    var newPath = p.slice(repo.length) || '/';
+    window.history.replaceState(null, '', newPath + window.location.search + window.location.hash);
+  }
+})();
+</script>`.trim() + "\n";
+
+          if (!html.includes('var repo =')) {
+            html = html.replace('<head>', '<head>\n' + snippet);
+            fs.writeFileSync(path, html, 'utf8');
+          }
+          NODE
+
+      - name: Add GitHub Pages SPA 404 redirect
+        run: |
+          cat > dist/404.html <<'HTML'
+          <!doctype html>
+          <html>
+            <head>
+              <meta charset="utf-8" />
+              <script>
+                (function () {
+                  var l = window.location;
+                  var repo = '/torna_a_casa';
+                  if (l.pathname.startsWith(repo + '/')) {
+                    l.replace(repo + '/');
+                  }
+                })();
+              </script>
+            </head>
+            <body></body>
+          </html>
+          HTML
 
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v3
