@@ -85,7 +85,7 @@ jobs:
         </head>
         <body></body>
       </html>
-      HTML
+HTML
 
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v3
