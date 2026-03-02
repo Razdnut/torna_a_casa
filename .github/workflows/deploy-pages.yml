@@ -69,23 +69,23 @@ jobs:
       - name: Add GitHub Pages SPA 404 redirect
         run: |
           cat > dist/404.html <<'HTML'
-          <!doctype html>
-          <html>
-            <head>
-              <meta charset="utf-8" />
-              <script>
-                (function () {
-                  var l = window.location;
-                  var repo = '/torna_a_casa';
-                  if (l.pathname.startsWith(repo + '/')) {
-                    l.replace(repo + '/');
-                  }
-                })();
-              </script>
-            </head>
-            <body></body>
-          </html>
-          HTML
+      <!doctype html>
+      <html>
+        <head>
+          <meta charset="utf-8" />
+          <script>
+            (function () {
+              var l = window.location;
+              var repo = '/torna_a_casa';
+              if (l.pathname.startsWith(repo + '/')) {
+                l.replace(repo + '/');
+              }
+            })();
+          </script>
+        </head>
+        <body></body>
+      </html>
+      HTML
 
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v3
