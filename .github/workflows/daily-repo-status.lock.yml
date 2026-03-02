@@ -166,7 +166,7 @@ jobs:
           </system>
           GH_AW_PROMPT_EOF
           cat << 'GH_AW_PROMPT_EOF'
-          {{#runtime-import .github/workflows/daily-repo-status.md}}
+          {{#runtime-import daily-repo-status.md}}
           GH_AW_PROMPT_EOF
           } > "$GH_AW_PROMPT"
       - name: Interpolate variables and render templates
