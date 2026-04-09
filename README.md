@@ -2,6 +2,7 @@
 
 ![Build Android Release](https://github.com/Razdnut/torna_a_casa/actions/workflows/android-release.yml/badge.svg)
 ![Deploy to GitHub Pages](https://github.com/Razdnut/torna_a_casa/actions/workflows/deploy-pages.yml/badge.svg)
+[![AI-DECLARATION: copilot](https://img.shields.io/badge/䷼%20AI--DECLARATION-copilot-fee2e2?labelColor=fee2e2)](https://ai-declaration.md)
 
 An Android application designed for monitoring employee work hours, specifically tailored for the Italian public sector. This hybrid mobile/web application allows employees to track their entry and exit times, manage lunch breaks, and record leaves or permits.
 
