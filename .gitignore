@@ -12,6 +12,12 @@ dist
 dist-ssr
 *.local
 
+# Android signing material
+*.jks
+*.keystore
+keystore
+android/app/keystore.properties
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json
@@ -22,3 +28,4 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
