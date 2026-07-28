@@ -85,10 +85,15 @@
   },
   "pnpm": {
     "overrides": {
-      "tar@^7.0.0": "7.5.9",
+      "tar@^7.0.0": "7.5.22",
       "glob@^10.0.0": "10.5.0",
       "glob@^11.0.0": "11.1.0",
-      "minimatch": "10.2.1",
+      "minimatch": "10.2.3",
+      "brace-expansion": "5.0.8",
+      "@xmldom/xmldom": "0.8.13",
+      "picomatch": "2.3.2",
+      "postcss": "8.5.24",
+      "yaml": "2.9.0",
       "@isaacs/brace-expansion": "5.0.1",
       "@eslint/plugin-kit": "0.3.4",
       "lodash": "4.17.23",
@@ -97,3 +102,4 @@
     }
   }
 }
+
