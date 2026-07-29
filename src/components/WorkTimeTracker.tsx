@@ -1,11 +1,13 @@
 "use client";
 
-import React, { useEffect, useState } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
+import WorkProgressCard from "@/components/WorkProgressCard";
 import { WorkDayCalculated, WorkDayRecord } from "@/types/worklog";
 import { formatDayKey, isValidDayKey } from "@/lib/worklog-date";
+import { getWorkProgress } from "@/lib/worklog-progress";
 import {
   getAutoSaveEnabled,
   loadWorkDay,
@@ -67,6 +69,32 @@ const OFFICE_CLOSE = 19 * 60;
 const LUNCH_START = 12 * 60;
 const LUNCH_END = 15 * 60;
 
+interface TimeFieldProps {
+  id: string;
+  label: string;
+  value: string;
+  min: string;
+  max: string;
+  required?: boolean;
+  disabled?: boolean;
+  showNow: boolean;
+  onChange: (value: string) => void;
+}
+
+const TimeField = ({ id, label, value, min, max, required, disabled, showNow, onChange }: TimeFieldProps) => (
+  <div>
+    <div className="mb-1 flex items-center justify-between gap-2">
+      <label htmlFor={id} className="block font-medium">{label}</label>
+      {showNow && !disabled && (
+        <Button type="button" size="sm" variant="ghost" className="h-7 px-2 text-xs" onClick={() => onChange(new Date().toTimeString().slice(0, 5))}>
+          Ora
+        </Button>
+      )}
+    </div>
+    <Input id={id} type="time" value={value} onChange={(event) => onChange(event.target.value)} min={min} max={max} required={required} disabled={disabled} />
+  </div>
+);
+
 const WorkTimeTracker: React.FC<WorkTimeTrackerProps> = ({ initialDayKey }) => {
   const todayKey = formatDayKey(new Date());
   const [dayKey, setDayKey] = useState<string>(
@@ -91,6 +119,13 @@ const WorkTimeTracker: React.FC<WorkTimeTrackerProps> = ({ initialDayKey }) => {
   const [autoSave, setAutoSave] = useState(false);
   const [dayLoaded, setDayLoaded] = useState(false);
   const [lastSavedAt, setLastSavedAt] = useState<string | null>(null);
+  const canSetCurrentTime = dayKey === todayKey;
+  const morningInDate = parseTime(morningIn);
+  const now = new Date();
+  const progress = getWorkProgress(
+    { morningIn, lunchOut, lunchIn, finalOut, pauseNoExit, usedPermit, permitOut, permitIn },
+    canSetCurrentTime ? now.getHours() * 60 + now.getMinutes() : morningInDate ? toMinutes(morningInDate) : 0,
+  );
 
   useEffect(() => {
     if (initialDayKey && isValidDayKey(initialDayKey)) {
@@ -147,7 +182,7 @@ const WorkTimeTracker: React.FC<WorkTimeTrackerProps> = ({ initialDayKey }) => {
     };
   }, [dayKey]);
 
-  function getPermitDuration(): number {
+  const getPermitDuration = useCallback((): number => {
     if (!usedPermit) return 0;
     const out = parseTime(permitOut);
     const inT = parseTime(permitIn);
@@ -155,9 +190,9 @@ const WorkTimeTracker: React.FC<WorkTimeTrackerProps> = ({ initialDayKey }) => {
       return diffMinutes(out, inT);
     }
     return 0;
-  }
+  }, [permitIn, permitOut, usedPermit]);
 
-  function buildRecord(): WorkDayRecord {
+  const buildRecord = useCallback((): WorkDayRecord => {
     return {
       morningIn,
       lunchOut,
@@ -170,7 +205,17 @@ const WorkTimeTracker: React.FC<WorkTimeTrackerProps> = ({ initialDayKey }) => {
       calculated,
       updatedAt: new Date().toISOString(),
     };
-  }
+  }, [
+    calculated,
+    finalOut,
+    lunchIn,
+    lunchOut,
+    morningIn,
+    pauseNoExit,
+    permitIn,
+    permitOut,
+    usedPermit,
+  ]);
 
   async function handleSaveDay() {
     const record = buildRecord();
@@ -197,17 +242,9 @@ const WorkTimeTracker: React.FC<WorkTimeTrackerProps> = ({ initialDayKey }) => {
     return () => clearTimeout(timeout);
   }, [
     autoSave,
+    buildRecord,
     dayLoaded,
     dayKey,
-    morningIn,
-    lunchOut,
-    lunchIn,
-    finalOut,
-    pauseNoExit,
-    usedPermit,
-    permitOut,
-    permitIn,
-    calculated,
   ]);
 
   useEffect(() => {
@@ -265,7 +302,7 @@ const WorkTimeTracker: React.FC<WorkTimeTrackerProps> = ({ initialDayKey }) => {
     } else {
       setExitHypothesis(null);
     }
-  }, [morningIn, lunchOut, lunchIn, pauseNoExit, usedPermit, permitOut, permitIn]);
+  }, [getPermitDuration, lunchIn, lunchOut, morningIn, pauseNoExit]);
 
   const calculate = () => {
     setError(null);
@@ -497,6 +534,8 @@ const WorkTimeTracker: React.FC<WorkTimeTrackerProps> = ({ initialDayKey }) => {
         </div>
       )}
 
+      <WorkProgressCard progress={progress} />
+
       {showPausaMinimaMsg && (
         <div className="mb-4 rounded bg-blue-100 p-2 text-sm font-semibold text-blue-900">
           Hai fatto una pausa pranzo inferiore a 30 min, ma verrà conteggiata
@@ -510,66 +549,13 @@ const WorkTimeTracker: React.FC<WorkTimeTrackerProps> = ({ initialDayKey }) => {
         }}
         className="space-y-4"
       >
-        <div>
-          <label htmlFor="morningIn" className="mb-1 block font-medium">
-            Ingresso Mattina (es. 07:30)
-          </label>
-          <Input
-            id="morningIn"
-            type="time"
-            value={morningIn}
-            onChange={(event) => setMorningIn(event.target.value)}
-            min="07:30"
-            max="19:00"
-            required
-          />
-        </div>
+        <TimeField id="morningIn" label="Ingresso Mattina (es. 07:30)" value={morningIn} onChange={setMorningIn} min="07:30" max="19:00" required showNow={canSetCurrentTime} />
 
-        <div>
-          <label htmlFor="lunchOut" className="mb-1 block font-medium">
-            Uscita Pausa Pranzo (es. 12:00)
-          </label>
-          <Input
-            id="lunchOut"
-            type="time"
-            value={lunchOut}
-            onChange={(event) => setLunchOut(event.target.value)}
-            min="12:00"
-            max="15:00"
-            required={!pauseNoExit}
-            disabled={pauseNoExit}
-          />
-        </div>
+        <TimeField id="lunchOut" label="Uscita Pausa Pranzo (es. 12:00)" value={lunchOut} onChange={setLunchOut} min="12:00" max="15:00" required={!pauseNoExit} disabled={pauseNoExit} showNow={canSetCurrentTime} />
 
-        <div>
-          <label htmlFor="lunchIn" className="mb-1 block font-medium">
-            Rientro Pausa Pranzo (es. 12:30)
-          </label>
-          <Input
-            id="lunchIn"
-            type="time"
-            value={lunchIn}
-            onChange={(event) => setLunchIn(event.target.value)}
-            min="12:30"
-            max="15:00"
-            required={!pauseNoExit}
-            disabled={pauseNoExit}
-          />
-        </div>
+        <TimeField id="lunchIn" label="Rientro Pausa Pranzo (es. 12:30)" value={lunchIn} onChange={setLunchIn} min="12:30" max="15:00" required={!pauseNoExit} disabled={pauseNoExit} showNow={canSetCurrentTime} />
 
-        <div>
-          <label htmlFor="finalOut" className="mb-1 block font-medium">
-            Uscita Finale (opzionale)
-          </label>
-          <Input
-            id="finalOut"
-            type="time"
-            value={finalOut}
-            onChange={(event) => setFinalOut(event.target.value)}
-            min="07:30"
-            max="19:00"
-          />
-        </div>
+        <TimeField id="finalOut" label="Uscita Finale (opzionale)" value={finalOut} onChange={setFinalOut} min="07:30" max="19:00" showNow={canSetCurrentTime} />
 
         <div className="mt-2 flex items-center space-x-2">
           <Checkbox
@@ -595,32 +581,8 @@ const WorkTimeTracker: React.FC<WorkTimeTrackerProps> = ({ initialDayKey }) => {
 
         {usedPermit && (
           <div className="mt-2 space-y-2">
-            <div>
-              <label htmlFor="permitOut" className="mb-1 block font-medium">
-                Orario uscita permesso
-              </label>
-              <Input
-                id="permitOut"
-                type="time"
-                value={permitOut}
-                onChange={(event) => setPermitOut(event.target.value)}
-                min="07:30"
-                max="19:00"
-              />
-            </div>
-            <div>
-              <label htmlFor="permitIn" className="mb-1 block font-medium">
-                Orario ingresso permesso
-              </label>
-              <Input
-                id="permitIn"
-                type="time"
-                value={permitIn}
-                onChange={(event) => setPermitIn(event.target.value)}
-                min="07:30"
-                max="19:00"
-              />
-            </div>
+            <TimeField id="permitOut" label="Orario uscita permesso" value={permitOut} onChange={setPermitOut} min="07:30" max="19:00" showNow={canSetCurrentTime} />
+            <TimeField id="permitIn" label="Orario ingresso permesso" value={permitIn} onChange={setPermitIn} min="07:30" max="19:00" showNow={canSetCurrentTime} />
           </div>
         )}
       </form>
