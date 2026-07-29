@@ -28,8 +28,15 @@ const pages = [
     action: "Apri Archivio",
   },
   {
+    title: "Ferie e permessi",
+    description:
+      "Registra assenze singole o intervalli e controlla i giorni residui.",
+    to: "/ferie",
+    action: "Apri Ferie",
+  },
+  {
     title: "Impostazioni",
-    description: "Attiva o disattiva l'autosalvataggio dei dati.",
+    description: "Configura autosalvataggio e plafond annuali.",
     to: "/impostazioni",
     action: "Apri Impostazioni",
   },

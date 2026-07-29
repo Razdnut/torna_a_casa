@@ -9,6 +9,7 @@ const menuItems = [
   { to: "/tracker", label: "Tracker" },
   { to: "/calendario", label: "Calendario" },
   { to: "/archivio", label: "Archivio" },
+  { to: "/ferie", label: "Ferie e permessi" },
   { to: "/impostazioni", label: "Impostazioni" },
 ];
 

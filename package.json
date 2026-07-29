@@ -1,13 +1,13 @@
 {
   "name": "vite_react_shadcn_ts",
   "private": true,
-  "version": "1.2.1",
+  "version": "1.3.0",
   "type": "module",
   "scripts": {
     "dev": "vite",
     "build": "vite build",
     "build:dev": "vite build --mode development",
-    "test": "node --test src/lib/worklog-progress.test.ts",
+    "test": "node --test src/lib/worklog-progress.test.ts src/lib/leave.test.ts",
     "lint": "eslint .",
     "preview": "vite preview"
   },

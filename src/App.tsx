@@ -8,6 +8,7 @@ import Index from "./pages/Index";
 import TrackerPage from "./pages/TrackerPage";
 import CalendarPage from "./pages/CalendarPage";
 import HistoryPage from "./pages/HistoryPage";
+import LeavePage from "./pages/LeavePage";
 import SettingsPage from "./pages/SettingsPage";
 import NotFound from "./pages/NotFound";
 
@@ -27,6 +28,7 @@ const App = () => (
             <Route path="/tracker/:dayKey" element={<TrackerPage />} />
             <Route path="/calendario" element={<CalendarPage />} />
             <Route path="/archivio" element={<HistoryPage />} />
+            <Route path="/ferie" element={<LeavePage />} />
             <Route path="/impostazioni" element={<SettingsPage />} />
             <Route path="*" element={<NotFound />} />
           </Routes>

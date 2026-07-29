@@ -4,6 +4,8 @@ import {
   SQLiteConnection,
   SQLiteDBConnection,
 } from "@capacitor-community/sqlite";
+import { defaultLeaveAllowances, isLeaveCategory } from "@/lib/leave";
+import { LeaveAllowanceSettings, LeaveEntry } from "@/types/leave";
 import { WorkDayEntry, WorkDayRecord } from "@/types/worklog";
 
 const LEGACY_DAYS_STORAGE_KEY = "worklog:v1:days";
@@ -16,6 +18,7 @@ const LEGACY_ENCRYPTION_SALT = "worklog-storage-salt-v1";
 const LEGACY_ENCRYPTION_ITERATIONS = 150000;
 
 const AUTO_SAVE_KEY = "auto_save";
+const LEAVE_ALLOWANCES_KEY = "leave_allowances";
 
 const DB_NAME = "worklog_db";
 const DB_VERSION = 1;
@@ -41,7 +44,18 @@ CREATE TABLE IF NOT EXISTS app_settings (
   value TEXT NOT NULL
 );
 
+CREATE TABLE IF NOT EXISTS leave_entries (
+  id TEXT PRIMARY KEY,
+  category TEXT NOT NULL,
+  start_day TEXT NOT NULL,
+  end_day TEXT NOT NULL,
+  notes TEXT NOT NULL DEFAULT '',
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
+
 CREATE INDEX IF NOT EXISTS idx_work_days_updated_at ON work_days(updated_at);
+CREATE INDEX IF NOT EXISTS idx_leave_entries_dates ON leave_entries(start_day, end_day);
 `;
 
 type DbRow = Record<string, unknown>;
@@ -51,6 +65,7 @@ let dbConnection: SQLiteDBConnection | null = null;
 
 const webDaysStore = new Map<string, WorkDayRecord>();
 const webSettingsStore = new Map<string, string>();
+const webLeaveEntriesStore = new Map<string, LeaveEntry>();
 
 let legacyWebStorageCleared = false;
 
@@ -521,6 +536,175 @@ export async function setAutoSaveEnabled(value: boolean): Promise<void> {
   webSettingsStore.set(AUTO_SAVE_KEY, serialized);
 }
 
+function normalizeLeaveAllowances(value: unknown): LeaveAllowanceSettings {
+  const defaults = defaultLeaveAllowances();
+  if (!value || typeof value !== "object") {
+    return defaults;
+  }
+
+  const candidate = value as Partial<LeaveAllowanceSettings>;
+  const normalizeNumber = (input: unknown, fallback: number) => {
+    const number = Number(input);
+    return Number.isFinite(number) && number >= 0 ? number : fallback;
+  };
+
+  const year = Math.trunc(normalizeNumber(candidate.year, defaults.year));
+
+  return {
+    year: year >= 2000 && year <= 2100 ? year : defaults.year,
+    annualCurrent: normalizeNumber(candidate.annualCurrent, 0),
+    annualPrevious: normalizeNumber(candidate.annualPrevious, 0),
+    formerHolidays: normalizeNumber(candidate.formerHolidays, 0),
+    seriousReasons: normalizeNumber(candidate.seriousReasons, 0),
+    unionAssembly: normalizeNumber(candidate.unionAssembly, 0),
+    recoveryDay: normalizeNumber(candidate.recoveryDay, 0),
+  };
+}
+
+async function getSettingValue(key: string): Promise<string | null> {
+  const db = await getNativeDb();
+
+  if (db) {
+    const result = await db.query(
+      "SELECT value FROM app_settings WHERE key = ?;",
+      [key],
+    );
+    const value = result.values?.[0]?.value;
+    return typeof value === "string" ? value : null;
+  }
+
+  clearLegacyWebStorage();
+  return webSettingsStore.get(key) ?? null;
+}
+
+async function setSettingValue(key: string, value: string): Promise<void> {
+  const db = await getNativeDb();
+
+  if (db) {
+    await db.run(
+      `
+      INSERT INTO app_settings (key, value)
+      VALUES (?, ?)
+      ON CONFLICT(key) DO UPDATE SET value = excluded.value;
+      `,
+      [key, value],
+    );
+    return;
+  }
+
+  clearLegacyWebStorage();
+  webSettingsStore.set(key, value);
+}
+
+export async function getLeaveAllowances(): Promise<LeaveAllowanceSettings> {
+  const serialized = await getSettingValue(LEAVE_ALLOWANCES_KEY);
+  if (!serialized) {
+    return defaultLeaveAllowances();
+  }
+
+  try {
+    return normalizeLeaveAllowances(JSON.parse(serialized));
+  } catch {
+    return defaultLeaveAllowances();
+  }
+}
+
+export async function setLeaveAllowances(
+  value: LeaveAllowanceSettings,
+): Promise<void> {
+  await setSettingValue(
+    LEAVE_ALLOWANCES_KEY,
+    JSON.stringify(normalizeLeaveAllowances(value)),
+  );
+}
+
+function mapRowToLeaveEntry(row: DbRow): LeaveEntry | null {
+  const category = row.category;
+  if (!isLeaveCategory(category)) {
+    return null;
+  }
+
+  return {
+    id: String(row.id ?? ""),
+    category,
+    startDay: String(row.start_day ?? ""),
+    endDay: String(row.end_day ?? ""),
+    notes: String(row.notes ?? ""),
+    createdAt: String(row.created_at ?? ""),
+    updatedAt: String(row.updated_at ?? ""),
+  };
+}
+
+export async function listLeaveEntries(): Promise<LeaveEntry[]> {
+  const db = await getNativeDb();
+
+  if (db) {
+    const result = await db.query(
+      `
+      SELECT id, category, start_day, end_day, notes, created_at, updated_at
+      FROM leave_entries
+      ORDER BY start_day DESC, created_at DESC;
+      `,
+    );
+
+    return ((result.values ?? []) as DbRow[])
+      .map(mapRowToLeaveEntry)
+      .filter((entry): entry is LeaveEntry => entry !== null);
+  }
+
+  clearLegacyWebStorage();
+  return Array.from(webLeaveEntriesStore.values()).sort((first, second) =>
+    first.startDay === second.startDay
+      ? second.createdAt.localeCompare(first.createdAt)
+      : second.startDay.localeCompare(first.startDay),
+  );
+}
+
+export async function saveLeaveEntry(entry: LeaveEntry): Promise<void> {
+  const db = await getNativeDb();
+
+  if (db) {
+    await db.run(
+      `
+      INSERT INTO leave_entries (
+        id, category, start_day, end_day, notes, created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?)
+      ON CONFLICT(id) DO UPDATE SET
+        category = excluded.category,
+        start_day = excluded.start_day,
+        end_day = excluded.end_day,
+        notes = excluded.notes,
+        updated_at = excluded.updated_at;
+      `,
+      [
+        entry.id,
+        entry.category,
+        entry.startDay,
+        entry.endDay,
+        entry.notes,
+        entry.createdAt,
+        entry.updatedAt,
+      ],
+    );
+    return;
+  }
+
+  clearLegacyWebStorage();
+  webLeaveEntriesStore.set(entry.id, entry);
+}
+
+export async function deleteLeaveEntry(id: string): Promise<void> {
+  const db = await getNativeDb();
+
+  if (db) {
+    await db.run("DELETE FROM leave_entries WHERE id = ?;", [id]);
+    return;
+  }
+
+  clearLegacyWebStorage();
+  webLeaveEntriesStore.delete(id);
+}
+
 export async function clearAllWorklogData(): Promise<void> {
   const db = await getNativeDb();
 
@@ -528,10 +712,12 @@ export async function clearAllWorklogData(): Promise<void> {
     await db.execute(`
       DELETE FROM work_days;
       DELETE FROM app_settings;
+      DELETE FROM leave_entries;
     `);
   }
 
   webDaysStore.clear();
   webSettingsStore.clear();
+  webLeaveEntriesStore.clear();
   clearLegacyWebStorage();
 }

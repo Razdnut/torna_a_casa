@@ -2,8 +2,17 @@ import { useState } from "react";
 import WelcomeModal from "@/components/WelcomeModal";
 import PageList from "@/components/PageList";
 
+let welcomeShownInThisSession = false;
+
 const Index = () => {
-  const [showWelcome, setShowWelcome] = useState(true);
+  const [showWelcome, setShowWelcome] = useState(() => {
+    if (welcomeShownInThisSession) {
+      return false;
+    }
+
+    welcomeShownInThisSession = true;
+    return true;
+  });
 
   return (
     <div className="min-h-screen bg-gray-100 p-4">
