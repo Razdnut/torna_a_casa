@@ -2,7 +2,8 @@ name: Export Dependabot alerts
 
 on:
   workflow_dispatch:
-
+  schedule:
+    - cron: "17 7 * * 1"
 
 # `vulnerability-alerts: read` grants the workflow token access to the
 # repository's Dependabot alert endpoint. No personal access token is needed.
@@ -18,7 +19,7 @@ jobs:
       - name: Download open Dependabot alerts
         id: download
         env:
-          GH_TOKEN: ${{secrets.GH_TOKEN}}
+          GH_TOKEN: ${{ github.token }}
         shell: bash
         run: |
           set -euo pipefail
