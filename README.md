@@ -147,3 +147,26 @@ MIT
   ![GitHub profile-details](http://github-profile-summary-cards.vercel.app/api/cards/profile-details?username=Razdnut&theme=material_palenight)
 
 </div>
+
+## Schermata Oggi, backup e resoconti
+
+- **Oggi** è la pagina iniziale: orario previsto di uscita, tempo restante aggiornato automaticamente, stato della giornata e sequenza ingresso / pausa / rientro / uscita. Le azioni rapide salvano immediatamente; gli orari restano modificabili dal tracker.
+- **Impostazioni → Backup e ripristino** esporta un file JSON versionato con tutte le giornate, le assenze, i plafond e l'autosalvataggio. L'importazione (massimo 20 MB) valida il file prima di mostrare l'anteprima. Per impostazione predefinita mantiene le registrazioni già presenti; una scelta esplicita permette di sostituirle. Le impostazioni vengono importate, mentre i dati non presenti nel file rimangono sul dispositivo. Il ripristino è atomico (transazione SQLite su Android, singola scrittura del documento locale sul web).
+- **Archivio → Resoconto mensile** ricalcola i totali dagli orari, include le assenze e permette l'esportazione PDF e CSV UTF-8 con separatore `;`. Giornate incomplete, orari incoerenti e sovrapposizioni sono evidenziati con collegamenti alle correzioni. È possibile esportare anche con anomalie: queste sono riportate nel file e le relative presenze sono escluse dai totali orari.
+- Sul **web** i dati sono conservati nel browser anche dopo un ricaricamento; su **Android** restano nel database SQLite. I file esportati vengono scaricati dal browser oppure passati al pannello di condivisione Android, dove scegliere la destinazione. Il backup è in chiaro e deve essere conservato privatamente. La data mostrata indica l'ultima esportazione, non garantisce la conservazione del file da parte della destinazione scelta.
+
+Le regole restano: obiettivo 7h12, pausa minima 30 minuti, ingresso dalle 07:30, uscita entro le 19:00 e pausa nella fascia 12:00–15:00. I permessi vengono recuperati: le ore effettive escludono pausa e permesso; il saldo usa queste ore rispetto all'obiettivo. Il conteggio assenze resta lunedì–venerdì, senza calendario delle festività. I giorni senza registrazioni non producono automaticamente un debito.
+
+### Verifiche di sviluppo
+
+Usare Node.js 22.18+ oppure 24 per eseguire direttamente i test TypeScript:
+
+```sh
+pnpm test
+pnpm exec tsc -p tsconfig.app.json --noEmit
+pnpm lint
+pnpm build
+pnpm exec cap sync android
+```
+
+Per la compilazione Android occorrono JDK 21 e Android SDK 35. I test coprono sequenza giornaliera, pause e permessi, validazione dei backup, anomalie, conteggi mensili e protezione dei campi CSV da formule. Le prove manuali nel browser devono includere esportazione/importazione, scelta di sovrascrittura, riapertura dei dati e visualizzazione mobile.

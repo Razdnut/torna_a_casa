@@ -7,14 +7,20 @@ import { Checkbox } from "@/components/ui/checkbox";
 import WorkProgressCard from "@/components/WorkProgressCard";
 import { WorkDayCalculated, WorkDayRecord } from "@/types/worklog";
 import { formatDayKey, isValidDayKey } from "@/lib/worklog-date";
-import { getWorkProgress } from "@/lib/worklog-progress";
+import {
+  calculateRecord,
+  dayIssues,
+  todayState,
+  TARGET,
+} from "@/lib/day-summary";
+import { useClock } from "@/hooks/use-clock";
 import {
   getAutoSaveEnabled,
   loadWorkDay,
   saveWorkDay,
   setAutoSaveEnabled,
 } from "@/lib/worklog-storage";
-import { showSuccess } from "@/utils/toast";
+import { showError, showSuccess } from "@/utils/toast";
 
 type TimeString = string;
 
@@ -81,22 +87,50 @@ interface TimeFieldProps {
   onChange: (value: string) => void;
 }
 
-const TimeField = ({ id, label, value, min, max, required, disabled, showNow, onChange }: TimeFieldProps) => (
+const TimeField = ({
+  id,
+  label,
+  value,
+  min,
+  max,
+  required,
+  disabled,
+  showNow,
+  onChange,
+}: TimeFieldProps) => (
   <div>
     <div className="mb-1 flex items-center justify-between gap-2">
-      <label htmlFor={id} className="block font-medium">{label}</label>
+      <label htmlFor={id} className="block font-medium">
+        {label}
+      </label>
       {showNow && !disabled && (
-        <Button type="button" size="sm" variant="ghost" className="h-7 px-2 text-xs" onClick={() => onChange(new Date().toTimeString().slice(0, 5))}>
+        <Button
+          type="button"
+          size="sm"
+          variant="ghost"
+          className="h-7 px-2 text-xs"
+          onClick={() => onChange(new Date().toTimeString().slice(0, 5))}
+        >
           Ora
         </Button>
       )}
     </div>
-    <Input id={id} type="time" value={value} onChange={(event) => onChange(event.target.value)} min={min} max={max} required={required} disabled={disabled} />
+    <Input
+      id={id}
+      type="time"
+      value={value}
+      onChange={(event) => onChange(event.target.value)}
+      min={min}
+      max={max}
+      required={required}
+      disabled={disabled}
+    />
   </div>
 );
 
 const WorkTimeTracker: React.FC<WorkTimeTrackerProps> = ({ initialDayKey }) => {
-  const todayKey = formatDayKey(new Date());
+  const now = useClock();
+  const todayKey = formatDayKey(now);
   const [dayKey, setDayKey] = useState<string>(
     initialDayKey && isValidDayKey(initialDayKey) ? initialDayKey : todayKey,
   );
@@ -121,12 +155,39 @@ const WorkTimeTracker: React.FC<WorkTimeTrackerProps> = ({ initialDayKey }) => {
   const [lastSavedAt, setLastSavedAt] = useState<string | null>(null);
   const canSetCurrentTime = dayKey === todayKey;
   const morningInDate = parseTime(morningIn);
-  const now = new Date();
-  const progress = getWorkProgress(
-    { morningIn, lunchOut, lunchIn, finalOut, pauseNoExit, usedPermit, permitOut, permitIn },
-    canSetCurrentTime ? now.getHours() * 60 + now.getMinutes() : morningInDate ? toMinutes(morningInDate) : 0,
-  );
 
+  const currentRecord: WorkDayRecord = {
+    morningIn,
+    lunchOut,
+    lunchIn,
+    finalOut,
+    pauseNoExit,
+    usedPermit,
+    permitOut,
+    permitIn,
+    calculated: null,
+    updatedAt: now.toISOString(),
+  };
+  const live = todayState(
+    currentRecord,
+    canSetCurrentTime
+      ? now.getHours() * 60 + now.getMinutes()
+      : morningInDate
+        ? toMinutes(morningInDate)
+        : 0,
+  );
+  const progress = morningInDate
+    ? {
+        workedMinutes: live.worked,
+        countedMinutes: live.worked,
+        permitMinutes: 0,
+        targetMinutes: TARGET,
+        percentage: Math.min(100, Math.round((live.worked / TARGET) * 100)),
+        status: (live.worked >= TARGET ? "complete" : "in-progress") as
+          "complete" | "in-progress",
+        detail: live.status,
+      }
+    : null;
   useEffect(() => {
     if (initialDayKey && isValidDayKey(initialDayKey)) {
       setDayKey(initialDayKey);
@@ -162,7 +223,7 @@ const WorkTimeTracker: React.FC<WorkTimeTrackerProps> = ({ initialDayKey }) => {
     setUsedPermit(record.usedPermit);
     setPermitOut(record.permitOut);
     setPermitIn(record.permitIn);
-    setCalculated(record.calculated);
+    setCalculated(calculateRecord(record));
     setError(null);
   }
 
@@ -202,11 +263,21 @@ const WorkTimeTracker: React.FC<WorkTimeTrackerProps> = ({ initialDayKey }) => {
       usedPermit,
       permitOut,
       permitIn,
-      calculated,
+      calculated: calculateRecord({
+        morningIn,
+        lunchOut,
+        lunchIn,
+        finalOut,
+        pauseNoExit,
+        usedPermit,
+        permitOut,
+        permitIn,
+        calculated: null,
+        updatedAt: new Date().toISOString(),
+      }),
       updatedAt: new Date().toISOString(),
     };
   }, [
-    calculated,
     finalOut,
     lunchIn,
     lunchOut,
@@ -218,16 +289,25 @@ const WorkTimeTracker: React.FC<WorkTimeTrackerProps> = ({ initialDayKey }) => {
   ]);
 
   async function handleSaveDay() {
+    if (!dayLoaded || !isValidDayKey(dayKey)) return;
     const record = buildRecord();
-    await saveWorkDay(dayKey, record);
+    try {
+      await saveWorkDay(dayKey, record);
+    } catch {
+      showError("Salvataggio non riuscito. Riprova.");
+      return;
+    }
     setLastSavedAt(record.updatedAt);
+    setCalculated(record.calculated);
     showSuccess(`Dati del ${dayKey} salvati`);
   }
 
   function handleAutoSaveToggle(value: boolean) {
     setAutoSave(value);
     setAutoSaveEnabled(value);
-    showSuccess(value ? "Autosalvataggio attivato" : "Autosalvataggio disattivato");
+    showSuccess(
+      value ? "Autosalvataggio attivato" : "Autosalvataggio disattivato",
+    );
   }
 
   useEffect(() => {
@@ -235,17 +315,13 @@ const WorkTimeTracker: React.FC<WorkTimeTrackerProps> = ({ initialDayKey }) => {
 
     const timeout = setTimeout(() => {
       const record = buildRecord();
-      saveWorkDay(dayKey, record);
-      setLastSavedAt(record.updatedAt);
+      saveWorkDay(dayKey, record)
+        .then(() => setLastSavedAt(record.updatedAt))
+        .catch(() => showError("Autosalvataggio non riuscito. Riprova."));
     }, 500);
 
     return () => clearTimeout(timeout);
-  }, [
-    autoSave,
-    buildRecord,
-    dayLoaded,
-    dayKey,
-  ]);
+  }, [autoSave, buildRecord, dayLoaded, dayKey]);
 
   useEffect(() => {
     const lunchOutDate = parseTime(lunchOut);
@@ -305,186 +381,14 @@ const WorkTimeTracker: React.FC<WorkTimeTrackerProps> = ({ initialDayKey }) => {
   }, [getPermitDuration, lunchIn, lunchOut, morningIn, pauseNoExit]);
 
   const calculate = () => {
-    setError(null);
-
-    const morningInDate = parseTime(morningIn);
-    const lunchOutDate = parseTime(lunchOut);
-    const lunchInDate = parseTime(lunchIn);
-    const finalOutDate = parseTime(finalOut);
-    const permitDuration = getPermitDuration();
-
-    if (pauseNoExit) {
-      if (!morningInDate) {
-        setError("Compila almeno Ingresso Mattina.");
-        setCalculated(null);
-        return;
-      }
-
-      if (!finalOutDate) {
-        setCalculated(null);
-        return;
-      }
-
-      if (toMinutes(morningInDate) < OFFICE_OPEN) {
-        setError("L'orario di ingresso mattutino non può essere prima delle 7:30");
-        setCalculated(null);
-        return;
-      }
-
-      if (toMinutes(finalOutDate) > OFFICE_CLOSE) {
-        setError("L'orario di uscita finale non può essere dopo le 19:00");
-        setCalculated(null);
-        return;
-      }
-
-      if (toMinutes(finalOutDate) <= toMinutes(morningInDate)) {
-        setError("L'uscita finale deve essere dopo l'ingresso mattina");
-        setCalculated(null);
-        return;
-      }
-
-      const totalRaw = diffMinutes(morningInDate, finalOutDate);
-      let total = totalRaw - PAUSA_OBBLIGATORIA_MIN;
-
-      if (usedPermit && pauseNoExit) {
-        total = totalRaw - PAUSA_OBBLIGATORIA_MIN;
-      }
-
-      let debt = 0;
-      let credit = 0;
-
-      if (totalRaw < WORK_DURATION_MIN + PAUSA_OBBLIGATORIA_MIN + permitDuration) {
-        debt = WORK_DURATION_MIN + PAUSA_OBBLIGATORIA_MIN + permitDuration - totalRaw;
-      } else if (totalRaw > WORK_DURATION_MIN + PAUSA_OBBLIGATORIA_MIN + permitDuration) {
-        credit = totalRaw - (WORK_DURATION_MIN + PAUSA_OBBLIGATORIA_MIN + permitDuration);
-      }
-
-      const totalWithPermit = total + permitDuration;
-
-      let totalWithPermitIfReached = total;
-      let reachedWorkTime = false;
-      if (usedPermit && pauseNoExit) {
-        if (total > WORK_DURATION_MIN) {
-          totalWithPermitIfReached = total + permitDuration;
-          reachedWorkTime = true;
-        } else if (total === WORK_DURATION_MIN) {
-          totalWithPermitIfReached = total;
-          reachedWorkTime = true;
-        }
-      }
-
-      setCalculated({
-        total,
-        debt,
-        credit,
-        totalWithPermit,
-        permitDuration,
-        totalRaw,
-        totalWithPermitIfReached,
-        reachedWorkTime,
-      });
-      return;
-    }
-
-    if (!morningInDate || !lunchOutDate || !lunchInDate) {
-      setError("Compila tutti gli orari richiesti per il calcolo.");
-      setCalculated(null);
-      return;
-    }
-
-    if (!finalOutDate) {
-      setCalculated(null);
-      return;
-    }
-
-    if (toMinutes(morningInDate) < OFFICE_OPEN) {
-      setError("L'orario di ingresso mattutino non può essere prima delle 7:30");
-      setCalculated(null);
-      return;
-    }
-
-    if (toMinutes(finalOutDate) > OFFICE_CLOSE) {
-      setError("L'orario di uscita finale non può essere dopo le 19:00");
-      setCalculated(null);
-      return;
-    }
-
-    if (toMinutes(lunchOutDate) < LUNCH_START) {
-      setError("La pausa pranzo può iniziare solo dalle 12:00");
-      setCalculated(null);
-      return;
-    }
-
-    if (toMinutes(lunchInDate) > LUNCH_END) {
-      setError("Il rientro dalla pausa pranzo non può essere dopo le 15:00");
-      setCalculated(null);
-      return;
-    }
-
-    if (toMinutes(lunchInDate) <= toMinutes(lunchOutDate)) {
-      setError("L'orario di rientro deve essere dopo l'uscita in pausa");
-      setCalculated(null);
-      return;
-    }
-
-    if (toMinutes(lunchOutDate) <= toMinutes(morningInDate)) {
-      setError("L'uscita pausa pranzo deve essere dopo l'ingresso mattina");
-      setCalculated(null);
-      return;
-    }
-
-    if (toMinutes(finalOutDate) <= toMinutes(lunchInDate)) {
-      setError("L'uscita finale deve essere dopo il rientro pausa pranzo");
-      setCalculated(null);
-      return;
-    }
-
-    const pausaEffettiva = diffMinutes(lunchOutDate, lunchInDate);
-    const pausaConsiderata = Math.max(pausaEffettiva, PAUSA_OBBLIGATORIA_MIN);
-    const totalEffettivo = diffMinutes(morningInDate, finalOutDate) - pausaConsiderata;
-
-    let debt = 0;
-    let credit = 0;
-
-    if (totalEffettivo < WORK_DURATION_MIN + permitDuration) {
-      debt = WORK_DURATION_MIN + permitDuration - totalEffettivo;
-    } else if (totalEffettivo > WORK_DURATION_MIN + permitDuration) {
-      credit = totalEffettivo - (WORK_DURATION_MIN + permitDuration);
-    }
-
-    const totalWithPermit = totalEffettivo + permitDuration;
-    setCalculated({
-      total: totalEffettivo,
-      debt,
-      credit,
-      totalWithPermit,
-      permitDuration,
-      totalRaw: totalEffettivo,
-      totalWithPermitIfReached: totalWithPermit,
-      reachedWorkTime: false,
-    });
+    const issues = dayIssues(currentRecord);
+    setError(issues.length ? issues.join(". ") : null);
+    setCalculated(calculateRecord(currentRecord));
   };
 
   function getVisualWorkedMinutes() {
-    if (!calculated) return 0;
-
-    if (usedPermit && pauseNoExit) {
-      if (calculated.reachedWorkTime) {
-        if (calculated.total > WORK_DURATION_MIN) {
-          return calculated.total + calculated.permitDuration;
-        }
-        return calculated.total;
-      }
-      return calculated.total;
-    }
-
-    if (usedPermit && calculated.permitDuration > 0) {
-      return calculated.totalWithPermit;
-    }
-
-    return calculated.total;
+    return calculateRecord(currentRecord)?.total ?? 0;
   }
-
   const showPausaMinimaMsg =
     pauseNoExit ||
     (!pauseNoExit &&
@@ -510,7 +414,11 @@ const WorkTimeTracker: React.FC<WorkTimeTrackerProps> = ({ initialDayKey }) => {
           />
         </div>
         <div className="flex items-end">
-          <Button onClick={handleSaveDay} className="w-full">
+          <Button
+            onClick={handleSaveDay}
+            disabled={!dayLoaded}
+            className="w-full"
+          >
             Salva giornata
           </Button>
         </div>
@@ -549,13 +457,50 @@ const WorkTimeTracker: React.FC<WorkTimeTrackerProps> = ({ initialDayKey }) => {
         }}
         className="space-y-4"
       >
-        <TimeField id="morningIn" label="Ingresso Mattina (es. 07:30)" value={morningIn} onChange={setMorningIn} min="07:30" max="19:00" required showNow={canSetCurrentTime} />
+        <TimeField
+          id="morningIn"
+          label="Ingresso Mattina (es. 07:30)"
+          value={morningIn}
+          onChange={setMorningIn}
+          min="07:30"
+          max="19:00"
+          required
+          showNow={canSetCurrentTime}
+        />
 
-        <TimeField id="lunchOut" label="Uscita Pausa Pranzo (es. 12:00)" value={lunchOut} onChange={setLunchOut} min="12:00" max="15:00" required={!pauseNoExit} disabled={pauseNoExit} showNow={canSetCurrentTime} />
+        <TimeField
+          id="lunchOut"
+          label="Uscita Pausa Pranzo (es. 12:00)"
+          value={lunchOut}
+          onChange={setLunchOut}
+          min="12:00"
+          max="15:00"
+          required={!pauseNoExit}
+          disabled={pauseNoExit}
+          showNow={canSetCurrentTime}
+        />
 
-        <TimeField id="lunchIn" label="Rientro Pausa Pranzo (es. 12:30)" value={lunchIn} onChange={setLunchIn} min="12:30" max="15:00" required={!pauseNoExit} disabled={pauseNoExit} showNow={canSetCurrentTime} />
+        <TimeField
+          id="lunchIn"
+          label="Rientro Pausa Pranzo (es. 12:30)"
+          value={lunchIn}
+          onChange={setLunchIn}
+          min="12:30"
+          max="15:00"
+          required={!pauseNoExit}
+          disabled={pauseNoExit}
+          showNow={canSetCurrentTime}
+        />
 
-        <TimeField id="finalOut" label="Uscita Finale (opzionale)" value={finalOut} onChange={setFinalOut} min="07:30" max="19:00" showNow={canSetCurrentTime} />
+        <TimeField
+          id="finalOut"
+          label="Uscita Finale (opzionale)"
+          value={finalOut}
+          onChange={setFinalOut}
+          min="07:30"
+          max="19:00"
+          showNow={canSetCurrentTime}
+        />
 
         <div className="mt-2 flex items-center space-x-2">
           <Checkbox
@@ -581,21 +526,39 @@ const WorkTimeTracker: React.FC<WorkTimeTrackerProps> = ({ initialDayKey }) => {
 
         {usedPermit && (
           <div className="mt-2 space-y-2">
-            <TimeField id="permitOut" label="Orario uscita permesso" value={permitOut} onChange={setPermitOut} min="07:30" max="19:00" showNow={canSetCurrentTime} />
-            <TimeField id="permitIn" label="Orario ingresso permesso" value={permitIn} onChange={setPermitIn} min="07:30" max="19:00" showNow={canSetCurrentTime} />
+            <TimeField
+              id="permitOut"
+              label="Orario uscita permesso"
+              value={permitOut}
+              onChange={setPermitOut}
+              min="07:30"
+              max="19:00"
+              showNow={canSetCurrentTime}
+            />
+            <TimeField
+              id="permitIn"
+              label="Orario ingresso permesso"
+              value={permitIn}
+              onChange={setPermitIn}
+              min="07:30"
+              max="19:00"
+              showNow={canSetCurrentTime}
+            />
           </div>
         )}
       </form>
 
       {!pauseNoExit && lunchDuration !== null && (
         <div className="mt-4 rounded bg-gray-100 p-2 text-sm text-blue-900">
-          Durata pausa pranzo: <strong>{Math.floor(lunchDuration)} minuti</strong>
+          Durata pausa pranzo:{" "}
+          <strong>{Math.floor(lunchDuration)} minuti</strong>
         </div>
       )}
 
       {exitHypothesis && (
         <div className="mt-2 rounded bg-blue-100 p-2 text-sm font-semibold text-blue-900">
-          Ipotesi orario uscita per {pauseNoExit ? "7h12m + 30min pausa" : "7h12m"}
+          Ipotesi orario uscita per{" "}
+          {pauseNoExit ? "7h12m + 30min pausa" : "7h12m"}
           {usedPermit && getPermitDuration() > 0
             ? ` + permesso (${Math.round(getPermitDuration())} min)`
             : ""}

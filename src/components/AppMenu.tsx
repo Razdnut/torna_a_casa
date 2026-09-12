@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
 const menuItems = [
-  { to: "/", label: "Home" },
+  { to: "/", label: "Oggi" },
   { to: "/tracker", label: "Tracker" },
   { to: "/calendario", label: "Calendario" },
   { to: "/archivio", label: "Archivio" },
@@ -25,7 +25,9 @@ const AppMenu = () => {
     <header className="sticky top-0 z-40 w-full border-b bg-white/95 backdrop-blur">
       <div className="mx-auto w-full max-w-5xl p-3">
         <div className="flex items-center justify-between">
-          <p className="text-sm font-semibold text-gray-700">Menu</p>
+          <NavLink to="/" className="font-bold tracking-tight text-emerald-900">
+            Torna a Casa
+          </NavLink>
           <Button
             type="button"
             variant="outline"
@@ -41,6 +43,7 @@ const AppMenu = () => {
 
         <nav
           id="app-menu-panel"
+          hidden={!isOpen}
           className={cn(
             "grid overflow-hidden transition-all duration-200",
             isOpen ? "mt-3 max-h-96 opacity-100" : "max-h-0 opacity-0",
@@ -51,6 +54,7 @@ const AppMenu = () => {
               <NavLink
                 key={item.to}
                 to={item.to}
+                end={item.to === "/"}
                 className={({ isActive }) =>
                   cn(
                     "rounded-md px-3 py-2 text-sm font-medium transition-colors",

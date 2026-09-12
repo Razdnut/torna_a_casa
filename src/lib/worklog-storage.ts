@@ -7,6 +7,7 @@ import {
 import { defaultLeaveAllowances, isLeaveCategory } from "@/lib/leave";
 import { LeaveAllowanceSettings, LeaveEntry } from "@/types/leave";
 import { WorkDayEntry, WorkDayRecord } from "@/types/worklog";
+import { backupSchema, type BackupData } from "./backup-data";
 
 const LEGACY_DAYS_STORAGE_KEY = "worklog:v1:days";
 const LEGACY_SETTINGS_STORAGE_KEY = "worklog:v1:settings";
@@ -62,10 +63,78 @@ type DbRow = Record<string, unknown>;
 
 let sqliteConnection: SQLiteConnection | null = null;
 let dbConnection: SQLiteDBConnection | null = null;
+let nativeReady: Promise<SQLiteDBConnection | null> | null = null;
+let webLoaded = false;
+const WEB_SNAPSHOT_KEY = "worklog:v2:snapshot";
 
 const webDaysStore = new Map<string, WorkDayRecord>();
 const webSettingsStore = new Map<string, string>();
 const webLeaveEntriesStore = new Map<string, LeaveEntry>();
+
+function loadWebSnapshot() {
+  if (webLoaded) return;
+  const raw = localStorage.getItem(WEB_SNAPSHOT_KEY);
+  if (raw) {
+    const snapshot = JSON.parse(raw);
+    const data = backupSchema.parse(snapshot.data);
+    data.days.forEach(({ dayKey, ...record }) =>
+      webDaysStore.set(dayKey, record as WorkDayRecord),
+    );
+    data.leaves.forEach((entry) =>
+      webLeaveEntriesStore.set(entry.id, entry as LeaveEntry),
+    );
+    webSettingsStore.set(AUTO_SAVE_KEY, data.settings.autoSave ? "1" : "0");
+    webSettingsStore.set(
+      LEAVE_ALLOWANCES_KEY,
+      JSON.stringify(data.settings.allowances),
+    );
+    if (typeof snapshot.lastBackup === "string")
+      webSettingsStore.set("last_backup", snapshot.lastBackup);
+  }
+  webLoaded = true;
+}
+
+function changeWebData(change: () => void) {
+  const previous = [
+    new Map(webDaysStore),
+    new Map(webSettingsStore),
+    new Map(webLeaveEntriesStore),
+  ] as const;
+  try {
+    change();
+    const data = {
+      app: "torna-a-casa",
+      version: 1,
+      createdAt: new Date().toISOString(),
+      days: Array.from(webDaysStore, ([dayKey, record]) => ({
+        dayKey,
+        ...record,
+      })),
+      leaves: Array.from(webLeaveEntriesStore.values()),
+      settings: {
+        autoSave: webSettingsStore.get(AUTO_SAVE_KEY) === "1",
+        allowances: normalizeLeaveAllowances(
+          JSON.parse(webSettingsStore.get(LEAVE_ALLOWANCES_KEY) ?? "null"),
+        ),
+      },
+    };
+    localStorage.setItem(
+      WEB_SNAPSHOT_KEY,
+      JSON.stringify({
+        data,
+        lastBackup: webSettingsStore.get("last_backup") ?? null,
+      }),
+    );
+  } catch (error) {
+    webDaysStore.clear();
+    previous[0].forEach((v, k) => webDaysStore.set(k, v));
+    webSettingsStore.clear();
+    previous[1].forEach((v, k) => webSettingsStore.set(k, v));
+    webLeaveEntriesStore.clear();
+    previous[2].forEach((v, k) => webLeaveEntriesStore.set(k, v));
+    throw error;
+  }
+}
 
 let legacyWebStorageCleared = false;
 
@@ -150,11 +219,15 @@ function base64ToBytes(value: string): Uint8Array {
 function isLegacyEncryptedPayload(value: unknown): value is string {
   return (
     typeof value === "string" &&
-    value.startsWith(`${LEGACY_ENCRYPTION_PREFIX}:${LEGACY_ENCRYPTION_VERSION}:`)
+    value.startsWith(
+      `${LEGACY_ENCRYPTION_PREFIX}:${LEGACY_ENCRYPTION_VERSION}:`,
+    )
   );
 }
 
-async function decryptLegacyPayload(payload: string): Promise<WorkDayRecord | null> {
+async function decryptLegacyPayload(
+  payload: string,
+): Promise<WorkDayRecord | null> {
   if (!isLegacyEncryptedPayload(payload)) {
     return null;
   }
@@ -206,7 +279,9 @@ async function decryptLegacyPayload(payload: string): Promise<WorkDayRecord | nu
     ciphertext,
   );
 
-  const parsed = JSON.parse(textDecoder.decode(plaintextBuffer)) as WorkDayRecord;
+  const parsed = JSON.parse(
+    textDecoder.decode(plaintextBuffer),
+  ) as WorkDayRecord;
   return normalizeRecord(parsed);
 }
 
@@ -239,7 +314,9 @@ async function ensureNativeSchema(db: SQLiteDBConnection): Promise<void> {
   );
 
   if (!hasEncryptedPayloadColumn) {
-    await db.execute("ALTER TABLE work_days ADD COLUMN encrypted_payload TEXT;");
+    await db.execute(
+      "ALTER TABLE work_days ADD COLUMN encrypted_payload TEXT;",
+    );
   }
 }
 
@@ -346,7 +423,7 @@ async function migrateLegacyNativeRows(db: SQLiteDBConnection): Promise<void> {
   clearLegacyWebStorage();
 }
 
-async function getNativeDb(): Promise<SQLiteDBConnection | null> {
+async function initializeNativeDb(): Promise<SQLiteDBConnection | null> {
   if (!isNativePlatform()) {
     clearLegacyWebStorage();
     return null;
@@ -381,6 +458,20 @@ async function getNativeDb(): Promise<SQLiteDBConnection | null> {
   return dbConnection;
 }
 
+async function getNativeDb(): Promise<SQLiteDBConnection | null> {
+  if (!isNativePlatform()) {
+    loadWebSnapshot();
+    return null;
+  }
+  if (!nativeReady)
+    nativeReady = initializeNativeDb().catch((error) => {
+      nativeReady = null;
+      dbConnection = null;
+      throw error;
+    });
+  return nativeReady;
+}
+
 export async function saveWorkDay(
   dayKey: string,
   record: WorkDayRecord,
@@ -394,10 +485,12 @@ export async function saveWorkDay(
   }
 
   clearLegacyWebStorage();
-  webDaysStore.set(dayKey, normalized);
+  changeWebData(() => webDaysStore.set(dayKey, normalized));
 }
 
-export async function loadWorkDay(dayKey: string): Promise<WorkDayRecord | null> {
+export async function loadWorkDay(
+  dayKey: string,
+): Promise<WorkDayRecord | null> {
   const db = await getNativeDb();
 
   if (db) {
@@ -533,7 +626,7 @@ export async function setAutoSaveEnabled(value: boolean): Promise<void> {
   }
 
   clearLegacyWebStorage();
-  webSettingsStore.set(AUTO_SAVE_KEY, serialized);
+  changeWebData(() => webSettingsStore.set(AUTO_SAVE_KEY, serialized));
 }
 
 function normalizeLeaveAllowances(value: unknown): LeaveAllowanceSettings {
@@ -593,7 +686,7 @@ async function setSettingValue(key: string, value: string): Promise<void> {
   }
 
   clearLegacyWebStorage();
-  webSettingsStore.set(key, value);
+  changeWebData(() => webSettingsStore.set(key, value));
 }
 
 export async function getLeaveAllowances(): Promise<LeaveAllowanceSettings> {
@@ -690,7 +783,7 @@ export async function saveLeaveEntry(entry: LeaveEntry): Promise<void> {
   }
 
   clearLegacyWebStorage();
-  webLeaveEntriesStore.set(entry.id, entry);
+  changeWebData(() => webLeaveEntriesStore.set(entry.id, entry));
 }
 
 export async function deleteLeaveEntry(id: string): Promise<void> {
@@ -702,7 +795,7 @@ export async function deleteLeaveEntry(id: string): Promise<void> {
   }
 
   clearLegacyWebStorage();
-  webLeaveEntriesStore.delete(id);
+  changeWebData(() => webLeaveEntriesStore.delete(id));
 }
 
 export async function clearAllWorklogData(): Promise<void> {
@@ -716,8 +809,95 @@ export async function clearAllWorklogData(): Promise<void> {
     `);
   }
 
-  webDaysStore.clear();
-  webSettingsStore.clear();
-  webLeaveEntriesStore.clear();
+  if (!db)
+    changeWebData(() => {
+      webDaysStore.clear();
+      webSettingsStore.clear();
+      webLeaveEntriesStore.clear();
+    });
   clearLegacyWebStorage();
+}
+
+export const getLastBackup = () => getSettingValue("last_backup");
+export const setLastBackup = (value: string) =>
+  setSettingValue("last_backup", value);
+
+export async function createBackup(): Promise<BackupData> {
+  const days = await listWorkDays();
+  const leaves = await listLeaveEntries();
+  const autoSave = await getAutoSaveEnabled();
+  const allowances = await getLeaveAllowances();
+  return backupSchema.parse({
+    app: "torna-a-casa",
+    version: 1,
+    createdAt: new Date().toISOString(),
+    days,
+    leaves,
+    settings: { autoSave, allowances },
+  });
+}
+
+/** Merge a fully validated backup atomically; existing records win by default. */
+export async function restoreBackup(
+  input: BackupData,
+  overwrite: boolean,
+): Promise<void> {
+  const data = backupSchema.parse(input);
+  const db = await getNativeDb();
+  if (!db) {
+    changeWebData(() => {
+      for (const { dayKey, ...record } of data.days)
+        if (overwrite || !webDaysStore.has(dayKey))
+          webDaysStore.set(dayKey, record as WorkDayRecord);
+      for (const entry of data.leaves)
+        if (overwrite || !webLeaveEntriesStore.has(entry.id))
+          webLeaveEntriesStore.set(entry.id, entry as LeaveEntry);
+      webSettingsStore.set(AUTO_SAVE_KEY, data.settings.autoSave ? "1" : "0");
+      webSettingsStore.set(
+        LEAVE_ALLOWANCES_KEY,
+        JSON.stringify(data.settings.allowances),
+      );
+    });
+    return;
+  }
+  const insert = overwrite ? "INSERT OR REPLACE" : "INSERT OR IGNORE";
+  const statements = data.days.map((day) => ({
+    statement: `${insert} INTO work_days (day_key, morning_in, lunch_out, lunch_in, final_out, pause_no_exit, used_permit, permit_out, permit_in, calculated_json, encrypted_payload, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?);`,
+    values: [
+      day.dayKey,
+      day.morningIn,
+      day.lunchOut,
+      day.lunchIn,
+      day.finalOut,
+      day.pauseNoExit ? 1 : 0,
+      day.usedPermit ? 1 : 0,
+      day.permitOut,
+      day.permitIn,
+      day.calculated ? JSON.stringify(day.calculated) : null,
+      day.updatedAt,
+    ],
+  }));
+  for (const entry of data.leaves)
+    statements.push({
+      statement: `${insert} INTO leave_entries (id, category, start_day, end_day, notes, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?);`,
+      values: [
+        entry.id,
+        entry.category,
+        entry.startDay,
+        entry.endDay,
+        entry.notes,
+        entry.createdAt,
+        entry.updatedAt,
+      ],
+    });
+  for (const [key, value] of [
+    [AUTO_SAVE_KEY, data.settings.autoSave ? "1" : "0"],
+    [LEAVE_ALLOWANCES_KEY, JSON.stringify(data.settings.allowances)],
+  ])
+    statements.push({
+      statement:
+        "INSERT OR REPLACE INTO app_settings (key, value) VALUES (?, ?);",
+      values: [key, value],
+    });
+  await db.executeSet(statements, true);
 }

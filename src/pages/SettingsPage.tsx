@@ -21,6 +21,7 @@ import {
 import { defaultLeaveAllowances, LEAVE_CATEGORIES } from "@/lib/leave";
 import { LeaveAllowanceSettings } from "@/types/leave";
 import { showError, showSuccess } from "@/utils/toast";
+import BackupCard from "@/components/BackupCard";
 
 const SettingsPage = () => {
   const [autoSave, setAutoSave] = useState(false);
@@ -37,7 +38,9 @@ const SettingsPage = () => {
   const handleToggle = (checked: boolean) => {
     setAutoSave(checked);
     setAutoSaveEnabled(checked);
-    showSuccess(checked ? "Autosalvataggio attivato" : "Autosalvataggio disattivato");
+    showSuccess(
+      checked ? "Autosalvataggio attivato" : "Autosalvataggio disattivato",
+    );
   };
 
   const updateAllowance = (
@@ -91,6 +94,12 @@ const SettingsPage = () => {
     <main className="min-h-screen bg-gray-100 p-4">
       <div className="mx-auto w-full max-w-3xl">
         <div className="space-y-4">
+          <BackupCard
+            onRestored={() => {
+              getAutoSaveEnabled().then(setAutoSave);
+              getLeaveAllowances().then(setAllowances);
+            }}
+          />
           <Card>
             <CardHeader>
               <CardTitle>Impostazioni</CardTitle>
@@ -105,7 +114,10 @@ const SettingsPage = () => {
                   checked={autoSave}
                   onCheckedChange={(checked) => handleToggle(!!checked)}
                 />
-                <label htmlFor="autoSaveSetting" className="text-sm font-medium">
+                <label
+                  htmlFor="autoSaveSetting"
+                  className="text-sm font-medium"
+                >
                   Autosalvataggio dati giornata
                 </label>
               </div>
@@ -117,7 +129,8 @@ const SettingsPage = () => {
 
               <div className="rounded-md border border-destructive/40 bg-destructive/5 p-3">
                 <p className="mb-3 text-sm text-destructive">
-                  Elimina cronologia e impostazioni locali da questo dispositivo.
+                  Elimina cronologia e impostazioni locali da questo
+                  dispositivo.
                 </p>
                 <Button variant="destructive" onClick={handleClearAllData}>
                   Elimina tutti i dati locali
