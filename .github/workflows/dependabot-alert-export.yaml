@@ -1,0 +1,23 @@
+name: dependabot-alert-export
+
+on:
+  workflow_dispatch:
+
+jobs:
+  export:
+    runs-on: ubuntu-latest
+
+    steps:
+          - name: Export Dependabot alerts
+            uses: ambilykk/dependabot-alert-export@v1.0
+            with:        
+              GITHUB_TOKEN: ${{secrets.GH_TOKEN}}
+              org_name: 'Razdnut'
+              repo_name: 'torna_a_casa'
+              csv_path: data/vulnerability.csv
+              
+          - name: Upload Vulnerability report
+            uses: actions/upload-artifact@v3
+            with:
+               name: vulnerability_report
+               path: data/vulnerability.csv
