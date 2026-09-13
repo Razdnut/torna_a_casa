@@ -28,6 +28,8 @@ jobs:
         uses: docker/metadata-action@v5
         with:
           images: ghcr.io/${{ github.repository_owner }}/torna-a-casa
+          labels: |
+            org.opencontainers.image.licenses=AGPL-3.0-only
           tags: |
             type=semver,pattern={{version}}
 
