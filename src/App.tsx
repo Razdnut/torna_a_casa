@@ -11,16 +11,18 @@ import HistoryPage from "./pages/HistoryPage";
 import LeavePage from "./pages/LeavePage";
 import SettingsPage from "./pages/SettingsPage";
 import NotFound from "./pages/NotFound";
+import { ThemeProvider } from "./components/theme-provider";
 
 const queryClient = new QueryClient();
 
 const App = () => (
   <QueryClientProvider client={queryClient}>
+    <ThemeProvider>
     <TooltipProvider>
       <Toaster />
       <Sonner />
       <BrowserRouter>
-        <div className="min-h-screen bg-gray-100">
+        <div className="min-h-screen bg-background">
           <AppMenu />
           <Routes>
             <Route path="/" element={<Index />} />
@@ -35,6 +37,7 @@ const App = () => (
         </div>
       </BrowserRouter>
     </TooltipProvider>
+    </ThemeProvider>
   </QueryClientProvider>
 );
 

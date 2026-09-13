@@ -396,7 +396,7 @@ const WorkTimeTracker: React.FC<WorkTimeTrackerProps> = ({ initialDayKey }) => {
       lunchDuration < PAUSA_OBBLIGATORIA_MIN);
 
   return (
-    <div className="mx-auto w-full max-w-md rounded-md bg-white p-6 shadow-md">
+    <div className="mx-auto w-full max-w-md rounded-md bg-card p-6 shadow-md">
       <h2 className="mb-4 text-center text-2xl font-semibold">
         Monitoraggio Orario Lavoro
       </h2>
@@ -436,7 +436,7 @@ const WorkTimeTracker: React.FC<WorkTimeTrackerProps> = ({ initialDayKey }) => {
       </div>
 
       {lastSavedAt && (
-        <div className="mb-4 rounded bg-gray-100 p-2 text-sm text-gray-700">
+        <div className="mb-4 rounded bg-muted p-2 text-sm text-muted-foreground">
           Ultimo salvataggio:{" "}
           <strong>{new Date(lastSavedAt).toLocaleString("it-IT")}</strong>
         </div>
@@ -549,7 +549,7 @@ const WorkTimeTracker: React.FC<WorkTimeTrackerProps> = ({ initialDayKey }) => {
       </form>
 
       {!pauseNoExit && lunchDuration !== null && (
-        <div className="mt-4 rounded bg-gray-100 p-2 text-sm text-blue-900">
+        <div className="mt-4 rounded bg-muted p-2 text-sm text-foreground">
           Durata pausa pranzo:{" "}
           <strong>{Math.floor(lunchDuration)} minuti</strong>
         </div>

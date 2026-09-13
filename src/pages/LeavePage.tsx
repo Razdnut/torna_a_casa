@@ -145,7 +145,7 @@ const LeavePage = () => {
   };
 
   return (
-    <main className="min-h-screen bg-gray-100 p-4">
+    <main className="min-h-screen bg-background p-4">
       <div className="mx-auto w-full max-w-5xl space-y-4">
         <div>
           <h1 className="text-3xl font-bold">Ferie e permessi</h1>

@@ -22,10 +22,10 @@ const AppMenu = () => {
   }, [location.pathname]);
 
   return (
-    <header className="sticky top-0 z-40 w-full border-b bg-white/95 backdrop-blur">
+    <header className="sticky top-0 z-40 w-full border-b bg-background/95 backdrop-blur">
       <div className="mx-auto w-full max-w-5xl p-3">
         <div className="flex items-center justify-between">
-          <NavLink to="/" className="font-bold tracking-tight text-emerald-900">
+          <NavLink to="/" className="font-bold tracking-tight text-primary">
             Torna a Casa
           </NavLink>
           <Button
@@ -60,7 +60,7 @@ const AppMenu = () => {
                     "rounded-md px-3 py-2 text-sm font-medium transition-colors",
                     isActive
                       ? "bg-primary text-primary-foreground"
-                      : "text-gray-700 hover:bg-gray-100",
+                      : "text-foreground hover:bg-muted",
                   )
                 }
               >
