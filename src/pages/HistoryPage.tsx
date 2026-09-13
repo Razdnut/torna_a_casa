@@ -62,7 +62,7 @@ export default function HistoryPage() {
     else void download(kind);
   }
   return (
-    <main className="min-h-screen bg-[#f3f5f2] p-4 sm:py-8">
+    <main className="min-h-screen bg-background p-4 sm:py-8">
       <div className="mx-auto max-w-5xl space-y-5">
         <div className="flex flex-wrap items-end justify-between gap-4">
           <div>
@@ -77,7 +77,7 @@ export default function HistoryPage() {
           <div className="flex flex-wrap gap-2">
             <input
               aria-label="Filtra archivio per mese"
-              className="h-10 rounded-md border bg-white px-3 text-sm"
+              className="h-10 rounded-md border bg-card px-3 text-sm"
               type="month"
               value={month}
               onChange={(event) => {
@@ -187,7 +187,7 @@ export default function HistoryPage() {
               {exportChoice && (
                 <section
                   aria-label="Conferma esportazione"
-                  className="space-y-3 rounded-xl border bg-white p-4"
+                  className="space-y-3 rounded-xl border bg-card p-4"
                 >
                   <p>
                     Il file {exportChoice.toUpperCase()} includerà le anomalie.

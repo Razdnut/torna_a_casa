@@ -27,7 +27,7 @@ const CalendarPage = () => {
   );
 
   return (
-    <main className="min-h-screen bg-gray-100 p-4">
+    <main className="min-h-screen bg-background p-4">
       <div className="mx-auto grid w-full max-w-5xl gap-4 lg:grid-cols-2">
         <Card>
           <CardHeader><CardTitle>Calendario giornate</CardTitle><CardDescription>Seleziona un giorno per recuperare i dati salvati.</CardDescription></CardHeader>
