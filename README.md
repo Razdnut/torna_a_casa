@@ -133,6 +133,7 @@ The repository includes a GitHub Action to automatically build and sign the rele
 ## Docker Deployment
 
 You can run the web application in a pre-built Docker container using Docker Compose.
+The published image is `ghcr.io/razdnut/torna-a-casa`.
 
 1.  **Scegli la versione dell'immagine:**
     Docker Compose usa `1.5.0` per impostazione predefinita. Per scegliere una release diversa, crea un file `.env` nella root:

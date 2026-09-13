@@ -1,6 +1,6 @@
 services:
   tornacasa:
-    image: "ghcr.io/razdnut/tornacasa:${TORNACASA_IMAGE_TAG:-1.5.0}"
+    image: "ghcr.io/razdnut/torna-a-casa:${TORNACASA_IMAGE_TAG:-1.5.0}"
     ports:
       - "8080:8080"
     restart: unless-stopped
