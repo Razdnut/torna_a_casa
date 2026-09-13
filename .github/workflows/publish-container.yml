@@ -30,7 +30,6 @@ jobs:
           images: ghcr.io/${{ github.repository_owner }}/tornacasa
           tags: |
             type=semver,pattern={{version}}
-            type=raw,value=latest
 
       - name: Build and publish image
         uses: docker/build-push-action@v6
