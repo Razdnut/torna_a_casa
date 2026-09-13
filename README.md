@@ -20,6 +20,26 @@ An Android application designed for monitoring employee work hours, specifically
 A live demo of the web application is available on GitHub Pages:
 [https://razdnut.github.io/torna_a_casa/](https://razdnut.github.io/torna_a_casa/)
 
+## Schermate dell'app
+
+Le immagini seguenti usano dati dimostrativi e mostrano le funzioni principali dell'app.
+
+### La giornata a colpo d'occhio
+
+![Dashboard con previsione dell'orario di uscita, avanzamento della giornata e saldo mensile](screenshots/01-dashboard-oggi.png)
+
+### Tracker giornaliero
+
+![Tracker degli orari di lavoro con autosalvataggio e avanzamento dell'obiettivo, nel tema Dim](screenshots/02-tracker-giornaliero.png)
+
+### Archivio ed esportazioni mensili
+
+![Resoconto mensile con presenze, assenze, saldo ed esportazione in PDF o CSV](screenshots/03-archivio-mensile.png)
+
+### Backup e temi
+
+![Impostazioni per backup e ripristino, con selezione dei temi Classico, Dim e Smeraldo](screenshots/04-impostazioni-e-temi.png)
+
 ## Technology Stack
 
 This project is built using modern web and mobile development technologies:
