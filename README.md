@@ -134,11 +134,11 @@ The repository includes a GitHub Action to automatically build and sign the rele
 
 You can run the web application in a pre-built Docker container using Docker Compose.
 
-1.  **Set the Immutable Image Digest:**
-    Before starting, set the immutable digest of the Docker image in a `.env` file at the root of the project. Replace `xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx` with the actual digest:
+1.  **Scegli la versione dell'immagine:**
+    Docker Compose usa `1.5.0` per impostazione predefinita. Per scegliere una release diversa, crea un file `.env` nella root:
 
     ```sh
-    TORNACASA_IMAGE_DIGEST=sha256:xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+    TORNACASA_IMAGE_TAG=1.5.0
     ```
 
 2.  **Start the Container:**

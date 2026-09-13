@@ -32,7 +32,7 @@ jobs:
       - name: Set up Node
         uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: '24'
           cache: 'pnpm'
 
       - name: Install dependencies
@@ -93,20 +93,27 @@ jobs:
             exit 1
           fi
 
-          cp "${signed_apk}" android/app/build/outputs/apk/release/tornacasa.apk
+          version="${GITHUB_REF_NAME#v}"
+          cp "${signed_apk}" "android/app/build/outputs/apk/release/torna-a-casa-${version}.apk"
+          sha256sum "android/app/build/outputs/apk/release/torna-a-casa-${version}.apk" > android/app/build/outputs/apk/release/SHA256SUMS.txt
 
       - name: Upload signed APK artifact
         uses: actions/upload-artifact@v4
         with:
           name: app-release-signed
-          path: android/app/build/outputs/apk/release/tornacasa.apk
+          path: |
+            android/app/build/outputs/apk/release/torna-a-casa-*.apk
+            android/app/build/outputs/apk/release/SHA256SUMS.txt
 
       - name: Create GitHub Release
         if: ${{ startsWith(github.ref, 'refs/tags/') || github.event.inputs.tag != '' }}
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ github.event.inputs.tag != '' && github.event.inputs.tag || github.ref_name }}
-          name: ${{ github.event.inputs.release_name != '' && github.event.inputs.release_name || format('Torna a Casa {0}', github.event.inputs.tag != '' && github.event.inputs.tag || github.ref_name) }}
-          files: android/app/build/outputs/apk/release/tornacasa.apk
+          name: ${{ github.event.inputs.release_name != '' && github.event.inputs.release_name || format('Torna a Casa {0}', github.ref_name) }}
+          body_path: release-notes-1.5.0.md
+          files: |
+            android/app/build/outputs/apk/release/torna-a-casa-*.apk
+            android/app/build/outputs/apk/release/SHA256SUMS.txt
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
