@@ -1,0 +1,11 @@
+.git
+.github
+.codex-remote-attachments
+.omx
+.playwright-mcp
+android
+dist
+node_modules
+screenshots
+*.md
+*.log

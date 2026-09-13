@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { NavLink, useLocation } from "react-router-dom";
 import { Menu, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { TornaACasaLogo } from "@/components/TornaACasaLogo";
 import { cn } from "@/lib/utils";
 
 const menuItems = [
@@ -25,8 +26,8 @@ const AppMenu = () => {
     <header className="sticky top-0 z-40 w-full border-b bg-background/95 backdrop-blur">
       <div className="mx-auto w-full max-w-5xl p-3">
         <div className="flex items-center justify-between">
-          <NavLink to="/" className="font-bold tracking-tight text-primary">
-            Torna a Casa
+          <NavLink to="/" className="text-primary" aria-label="Torna a Casa, pagina Oggi">
+            <TornaACasaLogo className="h-9 w-auto" />
           </NavLink>
           <Button
             type="button"
