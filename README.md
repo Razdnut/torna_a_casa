@@ -22,7 +22,7 @@ A live demo of the web application is available on GitHub Pages:
 
 ## Schermate dell'app
 
-Le immagini seguenti usano dati dimostrativi e mostrano le funzioni principali dell'app.
+Le immagini seguenti usano dati dimostrativi, mostrano le funzioni principali dell'app e sono in formato verticale per smartphone (1080×1920).
 
 ### La giornata a colpo d'occhio
 
