@@ -87,6 +87,8 @@ jobs:
 
       - name: Prepare signed APK for distribution
         shell: bash
+        env:
+          RELEASE_TAG: ${{ github.event.inputs.tag || github.ref_name }}
         run: |
           signed_apk="android/app/build/outputs/apk/release/app-release.apk"
           if [ ! -f "${signed_apk}" ]; then
@@ -95,7 +97,7 @@ jobs:
             exit 1
           fi
 
-          version="${GITHUB_REF_NAME#v}"
+          version="${RELEASE_TAG#v}"
           cp "${signed_apk}" "android/app/build/outputs/apk/release/torna-a-casa-${version}.apk"
           sha256sum "android/app/build/outputs/apk/release/torna-a-casa-${version}.apk" > android/app/build/outputs/apk/release/SHA256SUMS.txt
 
