@@ -28,6 +28,7 @@ export default function BackupCard({ onRestored }: { onRestored: () => void }) {
     conflicts: number;
     newDays: number;
     newLeaves: number;
+    newBalances: number;
   } | null>(null);
   const [overwrite, setOverwrite] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -78,11 +79,14 @@ export default function BackupCard({ onRestored }: { onRestored: () => void }) {
       const newLeaves = data.leaves.filter(
         (leave) => !leaveIds.has(leave.id),
       ).length;
+      const importedBalances = Object.keys(data.settings.monthlyBalanceAdjustments ?? {});
+      const newBalances = importedBalances.filter((month) => !Object.prototype.hasOwnProperty.call(current.settings.monthlyBalanceAdjustments ?? {}, month)).length;
       setPreview({
         data,
         newDays,
         newLeaves,
-        conflicts: data.days.length + data.leaves.length - newDays - newLeaves,
+        newBalances,
+        conflicts: data.days.length + data.leaves.length + importedBalances.length - newDays - newLeaves - newBalances,
       });
     } catch (error) {
       setError(
@@ -114,7 +118,7 @@ export default function BackupCard({ onRestored }: { onRestored: () => void }) {
       <CardHeader>
         <CardTitle>Backup e ripristino</CardTitle>
         <CardDescription>
-          Porta con te giornate, ferie, permessi, plafond e impostazioni.
+          Porta con te giornate, ferie, permessi, saldi mensili, plafond e impostazioni.
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-5">
@@ -183,6 +187,7 @@ export default function BackupCard({ onRestored }: { onRestored: () => void }) {
                 <strong>{preview.data.leaves.length}</strong> assenze (
                 {preview.newLeaves} nuove)
               </p>
+              <p><strong>{Object.keys(preview.data.settings.monthlyBalanceAdjustments ?? {}).length}</strong> rettifiche mensili ({preview.newBalances} nuove)</p>
             </div>
             <p className="text-sm">
               {preview.conflicts} registrazioni già presenti. Le registrazioni

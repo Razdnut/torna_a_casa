@@ -66,6 +66,10 @@ export const backupSchema = z
       .max(10000),
     settings: z.object({
       autoSave: z.boolean(),
+      monthlyBalanceAdjustments: z.record(
+        z.string().regex(/^(?!0000)\d{4}-(0[1-9]|1[0-2])$/),
+        z.number().int().min(-1000000).max(1000000),
+      ).optional(),
       allowances: z.object({
         year: z.number().int().min(2000).max(2100),
         annualCurrent: amount,

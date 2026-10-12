@@ -8,6 +8,7 @@ import { defaultLeaveAllowances, isLeaveCategory } from "@/lib/leave";
 import { LeaveAllowanceSettings, LeaveEntry } from "@/types/leave";
 import { WorkDayEntry, WorkDayRecord } from "@/types/worklog";
 import { backupSchema, type BackupData } from "./backup-data";
+import { validateMonthlyBalanceAdjustments, type MonthlyBalanceAdjustments } from "./month-balance";
 
 const LEGACY_DAYS_STORAGE_KEY = "worklog:v1:days";
 const LEGACY_SETTINGS_STORAGE_KEY = "worklog:v1:settings";
@@ -20,6 +21,7 @@ const LEGACY_ENCRYPTION_ITERATIONS = 150000;
 
 const AUTO_SAVE_KEY = "auto_save";
 const LEAVE_ALLOWANCES_KEY = "leave_allowances";
+const MONTHLY_BALANCE_KEY = "monthly_balance_adjustments";
 
 const DB_NAME = "worklog_db";
 const DB_VERSION = 1;
@@ -88,6 +90,10 @@ function loadWebSnapshot() {
       LEAVE_ALLOWANCES_KEY,
       JSON.stringify(data.settings.allowances),
     );
+    webSettingsStore.set(
+      MONTHLY_BALANCE_KEY,
+      JSON.stringify(data.settings.monthlyBalanceAdjustments ?? {}),
+    );
     if (typeof snapshot.lastBackup === "string")
       webSettingsStore.set("last_backup", snapshot.lastBackup);
   }
@@ -113,6 +119,7 @@ function changeWebData(change: () => void) {
       leaves: Array.from(webLeaveEntriesStore.values()),
       settings: {
         autoSave: webSettingsStore.get(AUTO_SAVE_KEY) === "1",
+        monthlyBalanceAdjustments: JSON.parse(webSettingsStore.get(MONTHLY_BALANCE_KEY) ?? "{}"),
         allowances: normalizeLeaveAllowances(
           JSON.parse(webSettingsStore.get(LEAVE_ALLOWANCES_KEY) ?? "null"),
         ),
@@ -207,7 +214,7 @@ function bytesToBase64(bytes: Uint8Array): string {
   return btoa(binary);
 }
 
-function base64ToBytes(value: string): Uint8Array {
+function base64ToBytes(value: string): Uint8Array<ArrayBuffer> {
   const binary = atob(value);
   const bytes = new Uint8Array(binary.length);
   for (let index = 0; index < binary.length; index += 1) {
@@ -689,6 +696,19 @@ async function setSettingValue(key: string, value: string): Promise<void> {
   changeWebData(() => webSettingsStore.set(key, value));
 }
 
+export async function getMonthlyBalanceAdjustments(): Promise<MonthlyBalanceAdjustments> {
+  const serialized = await getSettingValue(MONTHLY_BALANCE_KEY);
+  return validateMonthlyBalanceAdjustments(JSON.parse(serialized ?? "{}"));
+}
+
+export async function setMonthlyBalanceAdjustment(month: string, minutes: number | null): Promise<void> {
+  validateMonthlyBalanceAdjustments({ [month]: minutes ?? 0 });
+  const adjustments = await getMonthlyBalanceAdjustments();
+  if (minutes === null) delete adjustments[month];
+  else adjustments[month] = minutes;
+  await setSettingValue(MONTHLY_BALANCE_KEY, JSON.stringify(adjustments));
+}
+
 export async function getLeaveAllowances(): Promise<LeaveAllowanceSettings> {
   const serialized = await getSettingValue(LEAVE_ALLOWANCES_KEY);
   if (!serialized) {
@@ -827,13 +847,14 @@ export async function createBackup(): Promise<BackupData> {
   const leaves = await listLeaveEntries();
   const autoSave = await getAutoSaveEnabled();
   const allowances = await getLeaveAllowances();
+  const monthlyBalanceAdjustments = await getMonthlyBalanceAdjustments();
   return backupSchema.parse({
     app: "torna-a-casa",
     version: 1,
     createdAt: new Date().toISOString(),
     days,
     leaves,
-    settings: { autoSave, allowances },
+    settings: { autoSave, allowances, monthlyBalanceAdjustments },
   });
 }
 
@@ -844,8 +865,14 @@ export async function restoreBackup(
 ): Promise<void> {
   const data = backupSchema.parse(input);
   const db = await getNativeDb();
+  const currentAdjustments = await getMonthlyBalanceAdjustments();
+  const importedAdjustments = data.settings.monthlyBalanceAdjustments ?? {};
+  const mergedAdjustments = overwrite
+    ? { ...currentAdjustments, ...importedAdjustments }
+    : { ...importedAdjustments, ...currentAdjustments };
   if (!db) {
     changeWebData(() => {
+      webSettingsStore.set(MONTHLY_BALANCE_KEY, JSON.stringify(mergedAdjustments));
       for (const { dayKey, ...record } of data.days)
         if (overwrite || !webDaysStore.has(dayKey))
           webDaysStore.set(dayKey, record as WorkDayRecord);
@@ -893,6 +920,7 @@ export async function restoreBackup(
   for (const [key, value] of [
     [AUTO_SAVE_KEY, data.settings.autoSave ? "1" : "0"],
     [LEAVE_ALLOWANCES_KEY, JSON.stringify(data.settings.allowances)],
+    [MONTHLY_BALANCE_KEY, JSON.stringify(mergedAdjustments)],
   ])
     statements.push({
       statement:

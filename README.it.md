@@ -64,7 +64,7 @@ Giornate incomplete, orari incoerenti e sovrapposizioni sono evidenziati nel res
 ### Requisiti
 
 - [Node.js](https://nodejs.org/) 22.18+ oppure 24
-- [pnpm](https://pnpm.io/) 9+
+- [pnpm](https://pnpm.io/) 10.34.5
 
 ### Avvio
 

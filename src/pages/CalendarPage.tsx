@@ -5,26 +5,34 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { formatDayKey, formatReadableDate, parseDayKey } from "@/lib/worklog-date";
 import { formatDuration } from "@/lib/worklog-progress";
-import { listWorkDays, loadWorkDay } from "@/lib/worklog-storage";
+import { calculateMonthBalance, formatSignedDuration, type MonthlyBalanceAdjustments } from "@/lib/month-balance";
+import { getMonthlyBalanceAdjustments, listLeaveEntries, listWorkDays, loadWorkDay } from "@/lib/worklog-storage";
+import type { LeaveEntry } from "@/types/leave";
 import { WorkDayEntry, WorkDayRecord } from "@/types/worklog";
 
 const CalendarPage = () => {
   const [selectedDate, setSelectedDate] = useState<Date>(new Date());
+  const [adjustments, setAdjustments] = useState<MonthlyBalanceAdjustments>({});
+  const [leaves, setLeaves] = useState<LeaveEntry[]>([]);
+  const [error, setError] = useState("");
   const [savedDays, setSavedDays] = useState<WorkDayEntry[]>([]);
   const [selectedRecord, setSelectedRecord] = useState<WorkDayRecord | null>(null);
   const selectedDayKey = formatDayKey(selectedDate);
 
-  const refreshSavedDays = useCallback(() => { listWorkDays().then((days) => setSavedDays(days)); }, []);
+  const refreshSavedDays = useCallback(async () => {
+    try {
+      const [days, adjustments, leaves] = await Promise.all([listWorkDays(), getMonthlyBalanceAdjustments(), listLeaveEntries()]);
+      setSavedDays(days); setAdjustments(adjustments); setLeaves(leaves); setError("");
+    } catch { setError("Impossibile caricare il saldo. Riprova."); }
+  }, []);
   useEffect(() => { refreshSavedDays(); }, [refreshSavedDays]);
   useEffect(() => { loadWorkDay(selectedDayKey).then((record) => setSelectedRecord(record)); }, [selectedDayKey]);
 
   const savedDates = useMemo(() => savedDays.map((day) => parseDayKey(day.dayKey)), [savedDays]);
   const selectedMonth = selectedDayKey.slice(0, 7);
   const monthEntries = savedDays.filter((day) => day.dayKey.startsWith(selectedMonth));
-  const monthTotals = monthEntries.reduce(
-    (summary, entry) => ({ credit: summary.credit + (entry.calculated?.credit ?? 0), debt: summary.debt + (entry.calculated?.debt ?? 0) }),
-    { credit: 0, debt: 0 },
-  );
+  const balance = calculateMonthBalance(selectedMonth, savedDays, leaves, adjustments);
+  const monthTotals = { credit: Math.max(0, balance.closing), debt: Math.max(0, -balance.closing) };
 
   return (
     <main className="min-h-screen bg-background p-4">
@@ -34,11 +42,14 @@ const CalendarPage = () => {
           <CardContent className="flex flex-col items-center gap-4">
             <Calendar mode="single" selected={selectedDate} onSelect={(date) => { if (date) setSelectedDate(date); }} modifiers={{ saved: savedDates }} modifiersClassNames={{ saved: "bg-primary/20 rounded-md" }} className="rounded-md border" />
             <Button variant="outline" onClick={refreshSavedDays}>Aggiorna giorni salvati</Button>
+            {error && <p role="alert" className="text-destructive">{error}</p>}
             <div className="grid w-full grid-cols-3 gap-2 text-center text-sm">
               <div className="rounded-md bg-muted p-2"><strong className="block text-base">{monthEntries.length}</strong>giorni</div>
               <div className="rounded-md bg-emerald-50 p-2 text-emerald-800"><strong className="block text-base">{formatDuration(monthTotals.credit)}</strong>credito</div>
               <div className="rounded-md bg-rose-50 p-2 text-rose-800"><strong className="block text-base">{formatDuration(monthTotals.debt)}</strong>debito</div>
             </div>
+            <p className="text-sm text-muted-foreground">Saldo disponibile con riporto: {formatSignedDuration(balance.closing)}. Il riporto si azzera a gennaio.</p>
+            <Button asChild variant="outline"><Link to="/archivio">Gestisci saldo nell’archivio</Link></Button>
           </CardContent>
         </Card>
         <Card>

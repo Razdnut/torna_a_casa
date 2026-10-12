@@ -64,7 +64,7 @@ Incomplete days, inconsistent times, and overlapping records are highlighted in 
 ### Prerequisites
 
 - [Node.js](https://nodejs.org/) 22.18+ or 24
-- [pnpm](https://pnpm.io/) 9+
+- [pnpm](https://pnpm.io/) 10.34.5
 
 ### Get started
 

@@ -1,9 +1,10 @@
 import { jsPDF } from "jspdf";
 import autoTable from "jspdf-autotable";
 import type { MonthReport } from "./month-report";
+import { formatSignedDuration } from "./month-balance";
 import { formatDuration } from "./worklog-progress";
 
-export function reportPdf(report: MonthReport): Blob {
+export function reportPdf(report: MonthReport, balance?: { opening: number; earned: number; adjustment: number; closing: number }): Blob {
   const doc = new jsPDF({ orientation: "landscape" });
   doc.setProperties({
     title: `Torna a Casa - Resoconto ${report.month}`,
@@ -30,8 +31,12 @@ export function reportPdf(report: MonthReport): Blob {
     14,
     45,
   );
+  if (balance) {
+    doc.text(`Riporto: ${formatSignedDuration(balance.opening)} | Rettifica: ${formatSignedDuration(balance.adjustment)} | Saldo disponibile: ${formatSignedDuration(balance.closing)}`.replace(/−/g, "-"), 14, 52);
+    doc.text("Il riporto si azzera a gennaio. I saldi degli anni precedenti restano nello storico.", 14, 59);
+  }
   autoTable(doc, {
-    startY: 51,
+    startY: balance ? 65 : 51,
     margin: { top: 15, bottom: 22 },
     head: [
       [

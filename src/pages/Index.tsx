@@ -24,13 +24,14 @@ import { formatDayKey } from "@/lib/worklog-date";
 import { formatDuration } from "@/lib/worklog-progress";
 import {
   getLeaveAllowances,
+  getMonthlyBalanceAdjustments,
   listLeaveEntries,
   listWorkDays,
   loadWorkDay,
   saveWorkDay,
 } from "@/lib/worklog-storage";
 import { calculateLeaveBalances, getCategoryLabel } from "@/lib/leave";
-import { buildMonthReport } from "@/lib/month-report";
+import { calculateMonthBalance } from "@/lib/month-balance";
 import type { WorkDayRecord } from "@/types/worklog";
 import { showError, showSuccess } from "@/utils/toast";
 
@@ -66,7 +67,8 @@ export default function Index() {
       const days = await listWorkDays();
       const leaves = await listLeaveEntries();
       const allowances = await getLeaveAllowances();
-      const report = buildMonthReport(dayKey.slice(0, 7), days, leaves);
+      const adjustments = await getMonthlyBalanceAdjustments();
+      const balance = calculateMonthBalance(dayKey.slice(0, 7), days, leaves, adjustments);
       const balances = calculateLeaveBalances(leaves, allowances).filter(
         (row) =>
           row.category === "annual-current" ||
@@ -80,7 +82,7 @@ export default function Index() {
         setRecord(current ?? emptyDay());
         setLoadedDay(dayKey);
         setSummary({
-          balance: report.totals.credit - report.totals.debt,
+          balance: balance.closing,
           leave: balances.reduce((sum, row) => sum + row.remaining, 0),
           year: allowances.year,
           next: next
@@ -316,7 +318,7 @@ export default function Index() {
             <CardContent className="p-5">
               <Clock3 className="mb-4 h-5 w-5 text-emerald-700" />
               <p className="text-sm text-slate-500">
-                Saldo del mese · presenze valide
+                Saldo disponibile · riporto annuale
               </p>
               <p className="mt-1 text-2xl font-semibold">
                 {summary.balance < 0 ? "−" : "+"}

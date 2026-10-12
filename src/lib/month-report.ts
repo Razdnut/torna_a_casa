@@ -75,7 +75,7 @@ function csvCell(value: string | number) {
     /^[\s]*[=+@-]/.test(raw) && typeof value !== "number" ? `'${raw}` : raw;
   return `"${safe.replace(/"/g, '""')}"`;
 }
-export function reportCsv(report: MonthReport) {
+export function reportCsv(report: MonthReport, balance?: { opening: number; earned: number; adjustment: number; closing: number }) {
   const rows: (string | number)[][] = [
     [
       "Data",
@@ -124,5 +124,13 @@ export function reportCsv(report: MonthReport) {
     `${report.anomalies.length} giornate da verificare`,
     "",
   ]);
+  if (balance) {
+    rows.push([], ["SALDO (min)", "Valore"],
+      ["Riporto dai mesi precedenti", balance.opening],
+      ["Saldo delle giornate", balance.earned],
+      ["Rettifica manuale", balance.adjustment],
+      ["Saldo disponibile", balance.closing],
+      ["Riporto annuale", "Si azzera a gennaio; lo storico resta consultabile"]);
+  }
   return "\uFEFF" + rows.map((row) => row.map(csvCell).join(";")).join("\r\n");
 }

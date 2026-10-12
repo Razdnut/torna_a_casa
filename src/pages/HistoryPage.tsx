@@ -5,7 +5,9 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { formatDayKey, formatReadableDate } from "@/lib/worklog-date";
 import { formatDuration } from "@/lib/worklog-progress";
-import { listLeaveEntries, listWorkDays } from "@/lib/worklog-storage";
+import MonthlyBalanceCard from "@/components/MonthlyBalanceCard";
+import { calculateMonthBalance, type MonthlyBalanceAdjustments } from "@/lib/month-balance";
+import { getMonthlyBalanceAdjustments, setMonthlyBalanceAdjustment, listLeaveEntries, listWorkDays } from "@/lib/worklog-storage";
 import { buildMonthReport, reportCsv } from "@/lib/month-report";
 import { exportFile } from "@/lib/export-file";
 import type { WorkDayEntry } from "@/types/worklog";
@@ -15,6 +17,7 @@ import { showError } from "@/utils/toast";
 export default function HistoryPage() {
   const [entries, setEntries] = useState<WorkDayEntry[]>([]);
   const [leaves, setLeaves] = useState<LeaveEntry[]>([]);
+  const [adjustments, setAdjustments] = useState<MonthlyBalanceAdjustments>({});
   const [month, setMonth] = useState(() =>
     formatDayKey(new Date()).slice(0, 7),
   );
@@ -28,6 +31,7 @@ export default function HistoryPage() {
     try {
       setEntries(await listWorkDays());
       setLeaves(await listLeaveEntries());
+      setAdjustments(await getMonthlyBalanceAdjustments());
     } catch {
       setError("Impossibile caricare l’archivio. Riprova.");
     } finally {
@@ -41,14 +45,23 @@ export default function HistoryPage() {
     () => buildMonthReport(month, entries, leaves),
     [month, entries, leaves],
   );
-  const balance = report.totals.credit - report.totals.debt;
+  const monthBalance = useMemo(
+    () => calculateMonthBalance(month, entries, leaves, adjustments),
+    [month, entries, leaves, adjustments],
+  );
+  const balance = monthBalance.earned + monthBalance.adjustment;
+  const canExport = report.rows.length > 0 || monthBalance.closing !== 0 || Object.prototype.hasOwnProperty.call(adjustments, month);
+  async function saveBalance(adjustment: number | null) {
+    await setMonthlyBalanceAdjustment(month, adjustment);
+    setAdjustments(await getMonthlyBalanceAdjustments());
+  }
   async function download(kind: "csv" | "pdf") {
     setExporting(true);
     try {
       const blob =
         kind === "csv"
-          ? new Blob([reportCsv(report)], { type: "text/csv;charset=utf-8" })
-          : (await import("@/lib/report-pdf")).reportPdf(report);
+          ? new Blob([reportCsv(report, monthBalance)], { type: "text/csv;charset=utf-8" })
+          : (await import("@/lib/report-pdf")).reportPdf(report, monthBalance);
       await exportFile(`torna-a-casa-${month}.${kind}`, blob);
       setExportChoice(null);
     } catch {
@@ -81,7 +94,7 @@ export default function HistoryPage() {
               type="month"
               value={month}
               onChange={(event) => {
-                if (/^\d{4}-(0[1-9]|1[0-2])$/.test(event.target.value)) {
+                if (/^(?!0000)\d{4}-(0[1-9]|1[0-2])$/.test(event.target.value)) {
                   setMonth(event.target.value);
                   setExportChoice(null);
                 }
@@ -126,9 +139,10 @@ export default function HistoryPage() {
                 {formatDuration(report.totals.permit)}. I totali orari includono
                 solo giornate complete e senza anomalie.
               </p>
+              <MonthlyBalanceCard key={month} balance={monthBalance} hasAdjustment={Object.prototype.hasOwnProperty.call(adjustments, month)} onSave={saveBalance} />
               <div className="flex flex-wrap gap-2">
                 <Button
-                  disabled={!report.rows.length || exporting}
+                  disabled={!canExport || exporting}
                   onClick={() => requestExport("pdf")}
                 >
                   <FileText className="mr-2 h-4 w-4" />
@@ -136,7 +150,7 @@ export default function HistoryPage() {
                 </Button>
                 <Button
                   variant="outline"
-                  disabled={!report.rows.length || exporting}
+                  disabled={!canExport || exporting}
                   onClick={() => requestExport("csv")}
                 >
                   <Download className="mr-2 h-4 w-4" />

@@ -98,6 +98,14 @@ describe("Today and consistent hour totals", () => {
 describe("Backup validation", () => {
   it("round-trips complete data including settings and notes", () =>
     assert.deepEqual(parseBackup(JSON.stringify(backup())), backup()));
+  it("round-trips signed monthly adjustments and keeps old backups compatible", () => {
+    const data = { ...backup(), settings: { ...backup().settings, monthlyBalanceAdjustments: { "2026-09": -125, "2026-10": 60, "2027-01": 0 } } };
+    assert.deepEqual(parseBackup(JSON.stringify(data)), data);
+    assert.equal(parseBackup(JSON.stringify(backup())).settings.monthlyBalanceAdjustments, undefined);
+    for (const adjustments of [{ "2026-13": 1 }, { "2026-01": 0.5 }, { "2026-01": 1000001 }, { "0000-01": 1 }]) {
+      assert.throws(() => parseBackup(JSON.stringify({ ...data, settings: { ...data.settings, monthlyBalanceAdjustments: adjustments } })));
+    }
+  });
   it("rejects foreign, future, duplicate, corrupt and impossible-date backups", () => {
     assert.throws(() => parseBackup("not json"));
     for (const change of [
@@ -142,6 +150,12 @@ describe("Monthly report", () => {
     assert.equal(report.totals.leaveDays, 4);
     assert.equal(report.rows.length, 4);
     assert.throws(() => buildMonthReport("2026-13", [], []));
+  });
+  it("exports signed carried and adjusted balances even without daily rows", () => {
+    const csv = reportCsv(buildMonthReport("2026-10", [], []), { opening: -60, earned: 0, adjustment: 15, closing: -45 });
+    assert.ok(csv.includes('"Riporto dai mesi precedenti";"-60"'));
+    assert.ok(csv.includes('"Rettifica manuale";"15"'));
+    assert.ok(csv.includes('"Saldo disponibile";"-45"'));
   });
   it("exports UTF-8 CSV with totals and protects spreadsheet formulas", () => {
     const csv = reportCsv(
