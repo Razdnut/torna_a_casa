@@ -6,7 +6,7 @@ on:
   workflow_dispatch:
     inputs:
       tag:
-        description: 'Tag release da creare/aggiornare (es. 0.0.2 o lastest)'
+        description: 'Tag release da creare/aggiornare (es. 0.0.2 o v0.0.2)'
         required: false
         type: string
       release_name:
