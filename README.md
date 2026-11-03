@@ -13,6 +13,7 @@
 - **Daily work tracking:** Record arrival, break, return, and departure times.
 - **Live day overview:** See the estimated departure time, remaining time, daily progress, and monthly balance.
 - **Break, leave, and permit management:** Record breaks and account for approved absences and permits.
+- **Overtime tracking:** Flag planned overtime per day (1 to 6 hours), count it only when the extra time reaches 60 minutes, and track a separate monthly total with an optional goal.
 - **Monthly archive and exports:** Review attendance, absences, and balances; export summaries as PDF or CSV.
 - **Backup and restore:** Export a versioned JSON backup, validate it before importing, and choose whether to keep or replace existing records.
 - **Local-first storage:** Data stays in the browser on the web and in SQLite on Android.

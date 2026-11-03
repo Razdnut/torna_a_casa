@@ -13,6 +13,7 @@
 - **Rilevazione giornaliera:** Registra ingresso, pausa, rientro e uscita.
 - **Panoramica della giornata:** Mostra orario previsto di uscita, tempo restante, avanzamento e saldo mensile.
 - **Pause, assenze e permessi:** Gestisce pause e ore di assenza o permesso approvate.
+- **Straordinario:** Segna lo straordinario previsto per giornata (da 1 a 6 ore), conta solo se il tempo extra raggiunge 60 minuti e tiene un totale mensile separato con obiettivo facoltativo.
 - **Archivio ed esportazioni mensili:** Consulta presenze, assenze e saldi; esporta PDF e CSV.
 - **Backup e ripristino:** Esporta un backup JSON versionato, lo valida prima dell’importazione e permette di conservare o sostituire le registrazioni esistenti.
 - **Dati locali:** Sul web i dati restano nel browser; su Android nel database SQLite.
