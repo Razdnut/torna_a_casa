@@ -74,8 +74,13 @@ export function dayIssues(
   if (requireComplete && end === null) issues.push("Uscita finale mancante");
   if (start !== null && (start < 450 || start > 1140))
     issues.push("Ingresso fuori fascia 07:30–19:00");
-  if (end !== null && (end > 1140 || (start !== null && end <= start)))
-    issues.push("Uscita non successiva all’ingresso o oltre le 19:00");
+  const exitLimit = record.overtimeEnabled ? 1439 : 1140;
+  if (end !== null && (end > exitLimit || (start !== null && end <= start)))
+    issues.push(
+      record.overtimeEnabled
+        ? "Uscita non successiva all’ingresso o oltre le 23:59"
+        : "Uscita non successiva all’ingresso o oltre le 19:00",
+    );
   if (!record.pauseNoExit) {
     if (requireComplete && (out === null || back === null))
       issues.push("Pausa pranzo incompleta");
