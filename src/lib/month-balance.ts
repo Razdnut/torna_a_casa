@@ -12,7 +12,7 @@ export interface MonthBalance {
   closing: number;
 }
 
-const MONTH_PATTERN = /^(?!0000)\d{4}-(0[1-9]|1[0-2])$/;
+export const MONTH_PATTERN = /^(?!0000)\d{4}-(0[1-9]|1[0-2])$/;
 const MAX_ADJUSTMENT_MINUTES = 1_000_000;
 
 function assertMonth(month: string): void {
