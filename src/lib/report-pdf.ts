@@ -22,7 +22,7 @@ export function reportPdf(report: MonthReport, balance?: { opening: number; earn
   doc.text(`Resoconto mensile - ${monthLabel}`, 14, 28);
   doc.setFontSize(10);
   doc.text(
-    `Lavoro: ${formatDuration(report.totals.worked)}   |   Credito: ${formatDuration(report.totals.credit)}   |   Debito: ${formatDuration(report.totals.debt)}   |   Assenze: ${report.totals.leaveDays} giorni`,
+    `Lavoro: ${formatDuration(report.totals.worked)}   |   Credito: ${formatDuration(report.totals.credit)}   |   Debito: ${formatDuration(report.totals.debt)}   |   Assenze: ${report.totals.leaveDays} giorni   |   Straordinario: ${formatDuration(report.totals.overtime)}`,
     14,
     38,
   );
@@ -47,6 +47,7 @@ export function reportPdf(report: MonthReport, balance?: { opening: number; earn
         "Uscita",
         "Lavoro",
         "Permesso",
+        "Straord.",
         "Saldo",
         "Verifiche / note",
       ],
@@ -63,6 +64,7 @@ export function reportPdf(report: MonthReport, balance?: { opening: number; earn
       row.record?.finalOut || "-",
       row.totals ? formatDuration(row.totals.worked) : "-",
       row.totals ? formatDuration(row.totals.permit) : "-",
+      row.totals ? (row.totals.overtime > 0 ? formatDuration(row.totals.overtime) : "-") : "-",
       row.totals
         ? `${row.totals.balance < 0 ? "-" : "+"}${formatDuration(Math.abs(row.totals.balance))}`
         : "-",
@@ -77,7 +79,7 @@ export function reportPdf(report: MonthReport, balance?: { opening: number; earn
     columnStyles: {
       0: { cellWidth: 23 },
       1: { cellWidth: 34 },
-      8: { cellWidth: 64 },
+      9: { cellWidth: 64 },
     },
     didDrawPage: () => {
       doc.setFontSize(8);

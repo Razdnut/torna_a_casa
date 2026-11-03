@@ -6,8 +6,10 @@ import { Card, CardContent } from "@/components/ui/card";
 import { formatDayKey, formatReadableDate } from "@/lib/worklog-date";
 import { formatDuration } from "@/lib/worklog-progress";
 import MonthlyBalanceCard from "@/components/MonthlyBalanceCard";
+import OvertimeCard from "@/components/OvertimeCard";
+import { calculateOvertimeMonth, type OvertimeGoals } from "@/lib/overtime-month";
 import { calculateMonthBalance, type MonthlyBalanceAdjustments } from "@/lib/month-balance";
-import { getMonthlyBalanceAdjustments, setMonthlyBalanceAdjustment, listLeaveEntries, listWorkDays } from "@/lib/worklog-storage";
+import { getOvertimeGoals, setOvertimeGoal, getMonthlyBalanceAdjustments, setMonthlyBalanceAdjustment, listLeaveEntries, listWorkDays } from "@/lib/worklog-storage";
 import { buildMonthReport, reportCsv } from "@/lib/month-report";
 import { exportFile } from "@/lib/export-file";
 import type { WorkDayEntry } from "@/types/worklog";
@@ -18,6 +20,7 @@ export default function HistoryPage() {
   const [entries, setEntries] = useState<WorkDayEntry[]>([]);
   const [leaves, setLeaves] = useState<LeaveEntry[]>([]);
   const [adjustments, setAdjustments] = useState<MonthlyBalanceAdjustments>({});
+  const [goals, setGoals] = useState<OvertimeGoals>({});
   const [month, setMonth] = useState(() =>
     formatDayKey(new Date()).slice(0, 7),
   );
@@ -32,6 +35,7 @@ export default function HistoryPage() {
       setEntries(await listWorkDays());
       setLeaves(await listLeaveEntries());
       setAdjustments(await getMonthlyBalanceAdjustments());
+      setGoals(await getOvertimeGoals());
     } catch {
       setError("Impossibile caricare l’archivio. Riprova.");
     } finally {
@@ -49,11 +53,19 @@ export default function HistoryPage() {
     () => calculateMonthBalance(month, entries, leaves, adjustments),
     [month, entries, leaves, adjustments],
   );
+  const overtime = useMemo(
+    () => calculateOvertimeMonth(month, entries, leaves, goals),
+    [month, entries, leaves, goals],
+  );
   const balance = monthBalance.earned + monthBalance.adjustment;
   const canExport = report.rows.length > 0 || monthBalance.closing !== 0 || Object.prototype.hasOwnProperty.call(adjustments, month);
   async function saveBalance(adjustment: number | null) {
     await setMonthlyBalanceAdjustment(month, adjustment);
     setAdjustments(await getMonthlyBalanceAdjustments());
+  }
+  async function saveGoal(minutes: number | null) {
+    await setOvertimeGoal(month, minutes);
+    setGoals(await getOvertimeGoals());
   }
   async function download(kind: "csv" | "pdf") {
     setExporting(true);
@@ -136,10 +148,12 @@ export default function HistoryPage() {
               <p className="text-sm text-slate-600">
                 Credito: {formatDuration(report.totals.credit)} · Debito:{" "}
                 {formatDuration(report.totals.debt)} · Permessi:{" "}
-                {formatDuration(report.totals.permit)}. I totali orari includono
+                {formatDuration(report.totals.permit)} · Straordinario:{" "}
+                {formatDuration(report.totals.overtime)}. I totali orari includono
                 solo giornate complete e senza anomalie.
               </p>
               <MonthlyBalanceCard key={month} balance={monthBalance} hasAdjustment={Object.prototype.hasOwnProperty.call(adjustments, month)} onSave={saveBalance} />
+              <OvertimeCard key={`overtime-${month}`} overtime={overtime} onSaveGoal={saveGoal} />
               <div className="flex flex-wrap gap-2">
                 <Button
                   disabled={!canExport || exporting}
@@ -259,7 +273,7 @@ export default function HistoryPage() {
                             {row.issues.length
                               ? "Da verificare · esclusa dai totali orari"
                               : row.totals
-                                ? `${formatDuration(row.totals.worked)} lavorate · saldo ${row.totals.balance < 0 ? "−" : "+"}${formatDuration(Math.abs(row.totals.balance))}`
+                                ? `${formatDuration(row.totals.worked)} lavorate · saldo ${row.totals.balance < 0 ? "−" : "+"}${formatDuration(Math.abs(row.totals.balance))}${row.totals.overtime > 0 ? ` · straordinario ${formatDuration(row.totals.overtime)}` : ""}`
                                 : "Assenza registrata"}
                           </p>
                         </div>
