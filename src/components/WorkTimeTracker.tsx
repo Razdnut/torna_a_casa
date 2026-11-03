@@ -5,11 +5,13 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import WorkProgressCard from "@/components/WorkProgressCard";
+import OvertimeInput from "@/components/OvertimeInput";
 import { WorkDayCalculated, WorkDayRecord } from "@/types/worklog";
 import { formatDayKey, isValidDayKey } from "@/lib/worklog-date";
 import {
   calculateRecord,
   dayIssues,
+  overtimeWarning,
   todayState,
   TARGET,
 } from "@/lib/day-summary";
@@ -145,6 +147,9 @@ const WorkTimeTracker: React.FC<WorkTimeTrackerProps> = ({ initialDayKey }) => {
   const [permitOut, setPermitOut] = useState<TimeString>("");
   const [permitIn, setPermitIn] = useState<TimeString>("");
 
+  const [overtimeEnabled, setOvertimeEnabled] = useState(false);
+  const [overtimePlanned, setOvertimePlanned] = useState(0);
+
   const [calculated, setCalculated] = useState<WorkDayCalculated | null>(null);
   const [lunchDuration, setLunchDuration] = useState<number | null>(null);
   const [exitHypothesis, setExitHypothesis] = useState<string | null>(null);
@@ -165,6 +170,8 @@ const WorkTimeTracker: React.FC<WorkTimeTrackerProps> = ({ initialDayKey }) => {
     usedPermit,
     permitOut,
     permitIn,
+    overtimeEnabled,
+    overtimePlannedMinutes: overtimePlanned,
     calculated: null,
     updatedAt: now.toISOString(),
   };
@@ -208,6 +215,8 @@ const WorkTimeTracker: React.FC<WorkTimeTrackerProps> = ({ initialDayKey }) => {
       setUsedPermit(false);
       setPermitOut("");
       setPermitIn("");
+      setOvertimeEnabled(false);
+      setOvertimePlanned(0);
       setCalculated(null);
       setLunchDuration(null);
       setExitHypothesis(null);
@@ -223,6 +232,8 @@ const WorkTimeTracker: React.FC<WorkTimeTrackerProps> = ({ initialDayKey }) => {
     setUsedPermit(record.usedPermit);
     setPermitOut(record.permitOut);
     setPermitIn(record.permitIn);
+    setOvertimeEnabled(record.overtimeEnabled ?? false);
+    setOvertimePlanned(record.overtimePlannedMinutes ?? 0);
     setCalculated(calculateRecord(record));
     setError(null);
   }
@@ -263,6 +274,8 @@ const WorkTimeTracker: React.FC<WorkTimeTrackerProps> = ({ initialDayKey }) => {
       usedPermit,
       permitOut,
       permitIn,
+      overtimeEnabled,
+      overtimePlannedMinutes: overtimeEnabled ? overtimePlanned : 0,
       calculated: calculateRecord({
         morningIn,
         lunchOut,
@@ -272,6 +285,8 @@ const WorkTimeTracker: React.FC<WorkTimeTrackerProps> = ({ initialDayKey }) => {
         usedPermit,
         permitOut,
         permitIn,
+        overtimeEnabled,
+        overtimePlannedMinutes: overtimeEnabled ? overtimePlanned : 0,
         calculated: null,
         updatedAt: new Date().toISOString(),
       }),
@@ -282,6 +297,8 @@ const WorkTimeTracker: React.FC<WorkTimeTrackerProps> = ({ initialDayKey }) => {
     lunchIn,
     lunchOut,
     morningIn,
+    overtimeEnabled,
+    overtimePlanned,
     pauseNoExit,
     permitIn,
     permitOut,
@@ -341,13 +358,14 @@ const WorkTimeTracker: React.FC<WorkTimeTrackerProps> = ({ initialDayKey }) => {
 
   useEffect(() => {
     const permitDuration = getPermitDuration();
+    const overtimeDuration = overtimeEnabled ? overtimePlanned : 0;
 
     if (pauseNoExit) {
       const morningInDate = parseTime(morningIn);
       if (morningInDate) {
         const exit = addMinutes(
           morningInDate,
-          WORK_DURATION_MIN + PAUSA_OBBLIGATORIA_MIN + permitDuration,
+          WORK_DURATION_MIN + PAUSA_OBBLIGATORIA_MIN + permitDuration + overtimeDuration,
         );
         setExitHypothesis(formatTime(exit));
       } else {
@@ -372,13 +390,21 @@ const WorkTimeTracker: React.FC<WorkTimeTrackerProps> = ({ initialDayKey }) => {
       const remaining = WORK_DURATION_MIN - morningBlock;
       const exit = addMinutes(
         lunchInDate,
-        remaining + (pausaConsiderata - pausaEffettiva) + permitDuration,
+        remaining + (pausaConsiderata - pausaEffettiva) + permitDuration + overtimeDuration,
       );
       setExitHypothesis(formatTime(exit));
     } else {
       setExitHypothesis(null);
     }
-  }, [getPermitDuration, lunchIn, lunchOut, morningIn, pauseNoExit]);
+  }, [
+    getPermitDuration,
+    lunchIn,
+    lunchOut,
+    morningIn,
+    overtimeEnabled,
+    overtimePlanned,
+    pauseNoExit,
+  ]);
 
   const calculate = () => {
     const issues = dayIssues(currentRecord);
@@ -546,6 +572,14 @@ const WorkTimeTracker: React.FC<WorkTimeTrackerProps> = ({ initialDayKey }) => {
             />
           </div>
         )}
+
+        <OvertimeInput
+          enabled={overtimeEnabled}
+          minutes={overtimePlanned}
+          onEnabledChange={setOvertimeEnabled}
+          onMinutesChange={setOvertimePlanned}
+          exitTime={exitHypothesis}
+        />
       </form>
 
       {!pauseNoExit && lunchDuration !== null && (
@@ -562,7 +596,16 @@ const WorkTimeTracker: React.FC<WorkTimeTrackerProps> = ({ initialDayKey }) => {
           {usedPermit && getPermitDuration() > 0
             ? ` + permesso (${Math.round(getPermitDuration())} min)`
             : ""}
+          {overtimeEnabled && overtimePlanned > 0
+            ? ` + straordinario (${Math.floor(overtimePlanned / 60)}h ${overtimePlanned % 60}m)`
+            : ""}
           : <strong>{exitHypothesis}</strong>
+        </div>
+      )}
+
+      {overtimeWarning(currentRecord) && (
+        <div className="mt-2 rounded bg-amber-100 p-2 text-sm font-semibold text-amber-900">
+          {overtimeWarning(currentRecord)}
         </div>
       )}
 
@@ -592,6 +635,12 @@ const WorkTimeTracker: React.FC<WorkTimeTrackerProps> = ({ initialDayKey }) => {
           {calculated.credit > 0 && (
             <p className="font-semibold text-green-700">
               Credito giornaliero: {formatMinutesLabel(calculated.credit)}
+            </p>
+          )}
+
+          {(calculated.overtime ?? 0) > 0 && (
+            <p className="font-semibold text-blue-700">
+              Straordinario: {formatMinutesLabel(calculated.overtime)}
             </p>
           )}
 
