@@ -7,6 +7,7 @@ import {
   CalendarDays,
   ShieldCheck,
   Sun,
+  Timer,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -17,6 +18,8 @@ import {
   clockTime,
   dayIssues,
   emptyDay,
+  overtimeWarning,
+  plannedOvertime,
   TARGET,
   todayState,
 } from "@/lib/day-summary";
@@ -25,6 +28,7 @@ import { formatDuration } from "@/lib/worklog-progress";
 import {
   getLeaveAllowances,
   getMonthlyBalanceAdjustments,
+  getOvertimeGoals,
   listLeaveEntries,
   listWorkDays,
   loadWorkDay,
@@ -32,6 +36,7 @@ import {
 } from "@/lib/worklog-storage";
 import { calculateLeaveBalances, getCategoryLabel } from "@/lib/leave";
 import { calculateMonthBalance } from "@/lib/month-balance";
+import { calculateOvertimeMonth } from "@/lib/overtime-month";
 import type { WorkDayRecord } from "@/types/worklog";
 import { showError, showSuccess } from "@/utils/toast";
 
@@ -57,6 +62,8 @@ export default function Index() {
     year: 0,
     next: "Nessuna assenza pianificata",
     absentToday: false,
+    overtimeDone: 0,
+    overtimeGoal: null as number | null,
   });
   const [revision, setRevision] = useState(0);
   useEffect(() => {
@@ -68,6 +75,8 @@ export default function Index() {
       const leaves = await listLeaveEntries();
       const allowances = await getLeaveAllowances();
       const adjustments = await getMonthlyBalanceAdjustments();
+      const goals = await getOvertimeGoals();
+      const overtime = calculateOvertimeMonth(dayKey.slice(0, 7), days, leaves, goals);
       const balance = calculateMonthBalance(dayKey.slice(0, 7), days, leaves, adjustments);
       const balances = calculateLeaveBalances(leaves, allowances).filter(
         (row) =>
@@ -94,6 +103,8 @@ export default function Index() {
             ) &&
             weekday !== 0 &&
             weekday !== 6,
+          overtimeDone: overtime.done,
+          overtimeGoal: overtime.goal,
         });
       }
     })().catch(() => {
@@ -228,6 +239,11 @@ export default function Index() {
                           ? "Obiettivo raggiunto. Puoi registrare l’uscita."
                           : `Mancano ${formatDuration(state.exit - reference)} al tuo obiettivo.`}
               </p>
+              {!state.done && record.overtimeEnabled && (
+                <p className="mt-3 text-xs leading-relaxed text-emerald-100/80">
+                  Include {formatDuration(plannedOvertime(record))} di straordinario.
+                </p>
+              )}
               {!state.done && state.exit !== null && (
                 <p className="mt-3 text-xs leading-relaxed text-emerald-100/80">
                   {state.inPause || state.inPermit
@@ -313,7 +329,12 @@ export default function Index() {
             {problems.join(". ")}
           </div>
         )}
-        <div className="grid gap-4 sm:grid-cols-3">
+        {state.done && overtimeWarning(record) && (
+          <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-950">
+            {overtimeWarning(record)}
+          </div>
+        )}
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
           <Card className="rounded-2xl">
             <CardContent className="p-5">
               <Clock3 className="mb-4 h-5 w-5 text-emerald-700" />
@@ -359,6 +380,23 @@ export default function Index() {
                 to="/calendario"
               >
                 Apri calendario
+              </Link>
+            </CardContent>
+          </Card>
+          <Card className="rounded-2xl">
+            <CardContent className="p-5">
+              <Timer className="mb-4 h-5 w-5 text-violet-600" />
+              <p className="text-sm text-slate-500">Straordinario del mese</p>
+              <p className="mt-1 text-2xl font-semibold tabular-nums">
+                {summary.overtimeGoal === null
+                  ? `${formatDuration(summary.overtimeDone)} · nessun obiettivo`
+                  : `${formatDuration(summary.overtimeDone)} / ${formatDuration(summary.overtimeGoal)}`}
+              </p>
+              <Link
+                className="mt-3 inline-block text-sm underline underline-offset-4"
+                to="/archivio"
+              >
+                Apri il resoconto
               </Link>
             </CardContent>
           </Card>
