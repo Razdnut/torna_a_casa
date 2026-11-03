@@ -12,6 +12,7 @@ import {
   calculateRecord,
   dayIssues,
   overtimeWarning,
+  plannedOvertime,
   todayState,
   TARGET,
 } from "@/lib/day-summary";
@@ -191,7 +192,8 @@ const WorkTimeTracker: React.FC<WorkTimeTrackerProps> = ({ initialDayKey }) => {
         targetMinutes: TARGET,
         percentage: Math.min(100, Math.round((live.worked / TARGET) * 100)),
         status: (live.worked >= TARGET ? "complete" : "in-progress") as
-          "complete" | "in-progress",
+          | "complete"
+          | "in-progress",
         detail: live.status,
       }
     : null;
@@ -358,14 +360,20 @@ const WorkTimeTracker: React.FC<WorkTimeTrackerProps> = ({ initialDayKey }) => {
 
   useEffect(() => {
     const permitDuration = getPermitDuration();
-    const overtimeDuration = overtimeEnabled ? overtimePlanned : 0;
+    const overtimeDuration = plannedOvertime({
+      overtimeEnabled,
+      overtimePlannedMinutes: overtimePlanned,
+    });
 
     if (pauseNoExit) {
       const morningInDate = parseTime(morningIn);
       if (morningInDate) {
         const exit = addMinutes(
           morningInDate,
-          WORK_DURATION_MIN + PAUSA_OBBLIGATORIA_MIN + permitDuration + overtimeDuration,
+          WORK_DURATION_MIN +
+            PAUSA_OBBLIGATORIA_MIN +
+            permitDuration +
+            overtimeDuration,
         );
         setExitHypothesis(formatTime(exit));
       } else {
@@ -390,7 +398,10 @@ const WorkTimeTracker: React.FC<WorkTimeTrackerProps> = ({ initialDayKey }) => {
       const remaining = WORK_DURATION_MIN - morningBlock;
       const exit = addMinutes(
         lunchInDate,
-        remaining + (pausaConsiderata - pausaEffettiva) + permitDuration + overtimeDuration,
+        remaining +
+          (pausaConsiderata - pausaEffettiva) +
+          permitDuration +
+          overtimeDuration,
       );
       setExitHypothesis(formatTime(exit));
     } else {
@@ -596,8 +607,8 @@ const WorkTimeTracker: React.FC<WorkTimeTrackerProps> = ({ initialDayKey }) => {
           {usedPermit && getPermitDuration() > 0
             ? ` + permesso (${Math.round(getPermitDuration())} min)`
             : ""}
-          {overtimeEnabled && overtimePlanned > 0
-            ? ` + straordinario (${Math.floor(overtimePlanned / 60)}h ${overtimePlanned % 60}m)`
+          {plannedOvertime(currentRecord) > 0
+            ? ` + straordinario (${Math.floor(plannedOvertime(currentRecord) / 60)}h ${plannedOvertime(currentRecord) % 60}m)`
             : ""}
           : <strong>{exitHypothesis}</strong>
         </div>

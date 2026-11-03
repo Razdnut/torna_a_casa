@@ -26,6 +26,7 @@ const OvertimeInput: React.FC<OvertimeInputProps> = ({
 }) => {
   const hours = Math.floor(minutes / 60);
   const mins = minutes % 60;
+  const effective = minutes || OVERTIME_MIN;
   const outOfRange = minutes < OVERTIME_MIN || minutes > OVERTIME_MAX_PLANNED;
 
   function handleEnabledChange(checked: boolean) {
@@ -95,8 +96,8 @@ const OvertimeInput: React.FC<OvertimeInputProps> = ({
 
           {exitTime && (
             <div className="rounded bg-blue-100 p-2 text-sm font-semibold text-blue-900">
-              Per fare {hours}h {mins}m di straordinario devi uscire alle{" "}
-              <strong>{exitTime}</strong>
+              Per fare {Math.floor(effective / 60)}h {effective % 60}m di
+              straordinario devi uscire alle <strong>{exitTime}</strong>
             </div>
           )}
         </div>
