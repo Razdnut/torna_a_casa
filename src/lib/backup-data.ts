@@ -25,6 +25,7 @@ const calculated = z
     totalRaw: z.number().finite(),
     totalWithPermitIfReached: z.number().finite(),
     reachedWorkTime: z.boolean(),
+    overtime: amount.optional(),
   })
   .nullable();
 export const backupSchema = z
@@ -44,6 +45,8 @@ export const backupSchema = z
           usedPermit: z.boolean(),
           permitOut: time,
           permitIn: time,
+          overtimeEnabled: z.boolean().optional(),
+          overtimePlannedMinutes: z.number().int().min(0).max(1440).optional(),
           calculated,
           updatedAt: timestamp,
         }),

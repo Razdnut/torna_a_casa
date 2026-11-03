@@ -7,6 +7,7 @@ export interface WorkDayCalculated {
   totalRaw: number;
   totalWithPermitIfReached: number;
   reachedWorkTime: boolean;
+  overtime?: number;
 }
 
 export interface WorkDayRecord {
@@ -18,6 +19,8 @@ export interface WorkDayRecord {
   usedPermit: boolean;
   permitOut: string;
   permitIn: string;
+  overtimeEnabled?: boolean;
+  overtimePlannedMinutes?: number;
   calculated: WorkDayCalculated | null;
   updatedAt: string;
 }
