@@ -29,6 +29,7 @@ export default function BackupCard({ onRestored }: { onRestored: () => void }) {
     newDays: number;
     newLeaves: number;
     newBalances: number;
+    newGoals: number;
   } | null>(null);
   const [overwrite, setOverwrite] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -81,12 +82,15 @@ export default function BackupCard({ onRestored }: { onRestored: () => void }) {
       ).length;
       const importedBalances = Object.keys(data.settings.monthlyBalanceAdjustments ?? {});
       const newBalances = importedBalances.filter((month) => !Object.prototype.hasOwnProperty.call(current.settings.monthlyBalanceAdjustments ?? {}, month)).length;
+      const importedGoals = Object.keys(data.settings.overtimeGoals ?? {});
+      const newGoals = importedGoals.filter((month) => !Object.prototype.hasOwnProperty.call(current.settings.overtimeGoals ?? {}, month)).length;
       setPreview({
         data,
         newDays,
         newLeaves,
         newBalances,
-        conflicts: data.days.length + data.leaves.length + importedBalances.length - newDays - newLeaves - newBalances,
+        newGoals,
+        conflicts: data.days.length + data.leaves.length + importedBalances.length + importedGoals.length - newDays - newLeaves - newBalances - newGoals,
       });
     } catch (error) {
       setError(
@@ -188,6 +192,7 @@ export default function BackupCard({ onRestored }: { onRestored: () => void }) {
                 {preview.newLeaves} nuove)
               </p>
               <p><strong>{Object.keys(preview.data.settings.monthlyBalanceAdjustments ?? {}).length}</strong> rettifiche mensili ({preview.newBalances} nuove)</p>
+              <p><strong>{Object.keys(preview.data.settings.overtimeGoals ?? {}).length}</strong> obiettivi straordinario ({preview.newGoals} nuovi)</p>
             </div>
             <p className="text-sm">
               {preview.conflicts} registrazioni già presenti. Le registrazioni

@@ -655,7 +655,7 @@ const WorkTimeTracker: React.FC<WorkTimeTrackerProps> = ({ initialDayKey }) => {
             </p>
           )}
 
-          {calculated.debt === 0 && calculated.credit === 0 && (
+          {calculated.debt === 0 && calculated.credit === 0 && (calculated.overtime ?? 0) === 0 && (
             <p className="font-semibold text-green-700">
               Nessun debito, giornata regolare!
             </p>

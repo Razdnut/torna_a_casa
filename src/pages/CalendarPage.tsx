@@ -61,7 +61,7 @@ const CalendarPage = () => {
                 <p><strong>Pausa:</strong> {selectedRecord.pauseNoExit ? "Senza uscita" : `${selectedRecord.lunchOut || "-"} → ${selectedRecord.lunchIn || "-"}`}</p>
                 <p><strong>Uscita finale:</strong> {selectedRecord.finalOut || "-"}</p>
                 <p><strong>Permessi:</strong> {selectedRecord.usedPermit ? "Sì" : "No"}</p>
-                {selectedRecord.calculated && <div className="rounded-md bg-muted p-3 text-sm"><strong>Esito:</strong> {selectedRecord.calculated.credit > 0 ? `Credito ${formatDuration(selectedRecord.calculated.credit)}` : selectedRecord.calculated.debt > 0 ? `Debito ${formatDuration(selectedRecord.calculated.debt)}` : "Giornata regolare"}</div>}
+                {selectedRecord.calculated && <div className="rounded-md bg-muted p-3 text-sm"><strong>Esito:</strong> {(selectedRecord.calculated.overtime ?? 0) > 0 ? `Straordinario ${formatDuration(selectedRecord.calculated.overtime ?? 0)}` : selectedRecord.calculated.credit > 0 ? `Credito ${formatDuration(selectedRecord.calculated.credit)}` : selectedRecord.calculated.debt > 0 ? `Debito ${formatDuration(selectedRecord.calculated.debt)}` : "Giornata regolare"}</div>}
                 <p><strong>Ultimo salvataggio:</strong> {new Date(selectedRecord.updatedAt).toLocaleString("it-IT")}</p>
               </>
             ) : <p className="text-sm text-muted-foreground">Apri il tracker e salva la giornata per vederla qui.</p>}

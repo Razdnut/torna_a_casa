@@ -27,7 +27,7 @@ const OvertimeInput: React.FC<OvertimeInputProps> = ({
   const hours = Math.floor(minutes / 60);
   const mins = minutes % 60;
   const effective = minutes || OVERTIME_MIN;
-  const outOfRange = minutes < OVERTIME_MIN || minutes > OVERTIME_MAX_PLANNED;
+  const outOfRange = minutes !== 0 && (minutes < OVERTIME_MIN || minutes > OVERTIME_MAX_PLANNED);
 
   function handleEnabledChange(checked: boolean) {
     onEnabledChange(checked);
