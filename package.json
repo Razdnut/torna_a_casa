@@ -8,7 +8,7 @@
     "dev": "vite",
     "build": "vite build",
     "build:dev": "vite build --mode development",
-    "test": "node --test src/lib/worklog-progress.test.ts src/lib/leave.test.ts src/lib/features.test.ts src/lib/month-balance.test.ts src/lib/overtime.test.ts",
+    "test": "node --test src/lib/worklog-progress.test.ts src/lib/leave.test.ts src/lib/features.test.ts src/lib/month-balance.test.ts src/lib/overtime.test.ts src/lib/backup-data.test.ts",
     "lint": "eslint .",
     "preview": "vite preview"
   },

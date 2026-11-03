@@ -9,6 +9,7 @@ import { LeaveAllowanceSettings, LeaveEntry } from "@/types/leave";
 import { WorkDayEntry, WorkDayRecord } from "@/types/worklog";
 import { backupSchema, type BackupData } from "./backup-data";
 import { validateMonthlyBalanceAdjustments, type MonthlyBalanceAdjustments } from "./month-balance";
+import { validateOvertimeGoals, type OvertimeGoals } from "./overtime-month";
 
 const LEGACY_DAYS_STORAGE_KEY = "worklog:v1:days";
 const LEGACY_SETTINGS_STORAGE_KEY = "worklog:v1:settings";
@@ -22,6 +23,7 @@ const LEGACY_ENCRYPTION_ITERATIONS = 150000;
 const AUTO_SAVE_KEY = "auto_save";
 const LEAVE_ALLOWANCES_KEY = "leave_allowances";
 const MONTHLY_BALANCE_KEY = "monthly_balance_adjustments";
+const OVERTIME_GOALS_KEY = "overtime_goals";
 
 const DB_NAME = "worklog_db";
 const DB_VERSION = 1;
@@ -37,6 +39,8 @@ CREATE TABLE IF NOT EXISTS work_days (
   used_permit INTEGER NOT NULL DEFAULT 0,
   permit_out TEXT NOT NULL DEFAULT '',
   permit_in TEXT NOT NULL DEFAULT '',
+  overtime_enabled INTEGER NOT NULL DEFAULT 0,
+  overtime_planned INTEGER NOT NULL DEFAULT 0,
   calculated_json TEXT,
   encrypted_payload TEXT,
   updated_at TEXT NOT NULL
@@ -80,7 +84,7 @@ function loadWebSnapshot() {
     const snapshot = JSON.parse(raw);
     const data = backupSchema.parse(snapshot.data);
     data.days.forEach(({ dayKey, ...record }) =>
-      webDaysStore.set(dayKey, record as WorkDayRecord),
+      webDaysStore.set(dayKey, normalizeRecord(record as WorkDayRecord)),
     );
     data.leaves.forEach((entry) =>
       webLeaveEntriesStore.set(entry.id, entry as LeaveEntry),
@@ -93,6 +97,10 @@ function loadWebSnapshot() {
     webSettingsStore.set(
       MONTHLY_BALANCE_KEY,
       JSON.stringify(data.settings.monthlyBalanceAdjustments ?? {}),
+    );
+    webSettingsStore.set(
+      OVERTIME_GOALS_KEY,
+      JSON.stringify(data.settings.overtimeGoals ?? {}),
     );
     if (typeof snapshot.lastBackup === "string")
       webSettingsStore.set("last_backup", snapshot.lastBackup);
@@ -120,6 +128,7 @@ function changeWebData(change: () => void) {
       settings: {
         autoSave: webSettingsStore.get(AUTO_SAVE_KEY) === "1",
         monthlyBalanceAdjustments: JSON.parse(webSettingsStore.get(MONTHLY_BALANCE_KEY) ?? "{}"),
+        overtimeGoals: JSON.parse(webSettingsStore.get(OVERTIME_GOALS_KEY) ?? "{}"),
         allowances: normalizeLeaveAllowances(
           JSON.parse(webSettingsStore.get(LEAVE_ALLOWANCES_KEY) ?? "null"),
         ),
@@ -165,8 +174,14 @@ function clearLegacyWebStorage(): void {
 }
 
 function normalizeRecord(record: WorkDayRecord): WorkDayRecord {
+  const planned = record.overtimePlannedMinutes;
   return {
     ...record,
+    overtimeEnabled: record.overtimeEnabled === true,
+    overtimePlannedMinutes:
+      typeof planned === "number" && Number.isInteger(planned) && planned >= 0 && planned <= 360
+        ? planned
+        : 0,
     updatedAt: record.updatedAt || new Date().toISOString(),
   };
 }
@@ -183,6 +198,8 @@ function mapPlainRowToRecord(row: DbRow): WorkDayRecord {
     usedPermit: Number(row.used_permit ?? 0) === 1,
     permitOut: String(row.permit_out ?? ""),
     permitIn: String(row.permit_in ?? ""),
+    overtimeEnabled: Number(row.overtime_enabled ?? 0) === 1,
+    overtimePlannedMinutes: Number(row.overtime_planned ?? 0),
     calculated:
       typeof calculatedRaw === "string" && calculatedRaw.length > 0
         ? (JSON.parse(calculatedRaw) as WorkDayRecord["calculated"])
@@ -201,6 +218,8 @@ function entryToRecord(entry: WorkDayEntry): WorkDayRecord {
     usedPermit: entry.usedPermit,
     permitOut: entry.permitOut,
     permitIn: entry.permitIn,
+    overtimeEnabled: entry.overtimeEnabled,
+    overtimePlannedMinutes: entry.overtimePlannedMinutes,
     calculated: entry.calculated,
     updatedAt: entry.updatedAt,
   };
@@ -316,13 +335,23 @@ async function ensureNativeSchema(db: SQLiteDBConnection): Promise<void> {
   await db.execute(CREATE_SCHEMA_SQL);
 
   const tableInfo = await db.query("PRAGMA table_info(work_days);");
-  const hasEncryptedPayloadColumn = (tableInfo.values ?? []).some(
-    (row) => String((row as DbRow).name ?? "") === "encrypted_payload",
+  const columns = new Set(
+    (tableInfo.values ?? []).map((row) => String((row as DbRow).name ?? "")),
   );
 
-  if (!hasEncryptedPayloadColumn) {
+  if (!columns.has("encrypted_payload")) {
     await db.execute(
       "ALTER TABLE work_days ADD COLUMN encrypted_payload TEXT;",
+    );
+  }
+  if (!columns.has("overtime_enabled")) {
+    await db.execute(
+      "ALTER TABLE work_days ADD COLUMN overtime_enabled INTEGER NOT NULL DEFAULT 0;",
+    );
+  }
+  if (!columns.has("overtime_planned")) {
+    await db.execute(
+      "ALTER TABLE work_days ADD COLUMN overtime_planned INTEGER NOT NULL DEFAULT 0;",
     );
   }
 }
@@ -349,10 +378,12 @@ async function upsertPlainWorkDay(
       used_permit,
       permit_out,
       permit_in,
+      overtime_enabled,
+      overtime_planned,
       calculated_json,
       encrypted_payload,
       updated_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?)
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?)
     ON CONFLICT(day_key) DO UPDATE SET
       morning_in = excluded.morning_in,
       lunch_out = excluded.lunch_out,
@@ -362,6 +393,8 @@ async function upsertPlainWorkDay(
       used_permit = excluded.used_permit,
       permit_out = excluded.permit_out,
       permit_in = excluded.permit_in,
+      overtime_enabled = excluded.overtime_enabled,
+      overtime_planned = excluded.overtime_planned,
       calculated_json = excluded.calculated_json,
       encrypted_payload = NULL,
       updated_at = excluded.updated_at;
@@ -376,6 +409,8 @@ async function upsertPlainWorkDay(
       normalized.usedPermit ? 1 : 0,
       normalized.permitOut,
       normalized.permitIn,
+      normalized.overtimeEnabled ? 1 : 0,
+      normalized.overtimePlannedMinutes ?? 0,
       calculatedJson,
       normalized.updatedAt,
     ],
@@ -395,6 +430,8 @@ async function migrateLegacyNativeRows(db: SQLiteDBConnection): Promise<void> {
       used_permit,
       permit_out,
       permit_in,
+      overtime_enabled,
+      overtime_planned,
       calculated_json,
       encrypted_payload,
       updated_at
@@ -513,6 +550,8 @@ export async function loadWorkDay(
         used_permit,
         permit_out,
         permit_in,
+        overtime_enabled,
+        overtime_planned,
         calculated_json,
         encrypted_payload,
         updated_at
@@ -537,7 +576,8 @@ export async function loadWorkDay(
   }
 
   clearLegacyWebStorage();
-  return webDaysStore.get(dayKey) ?? null;
+  const stored = webDaysStore.get(dayKey);
+  return stored ? normalizeRecord(stored) : null;
 }
 
 export async function listWorkDays(): Promise<WorkDayEntry[]> {
@@ -556,6 +596,8 @@ export async function listWorkDays(): Promise<WorkDayEntry[]> {
         used_permit,
         permit_out,
         permit_in,
+        overtime_enabled,
+        overtime_planned,
         calculated_json,
         encrypted_payload,
         updated_at
@@ -709,6 +751,19 @@ export async function setMonthlyBalanceAdjustment(month: string, minutes: number
   await setSettingValue(MONTHLY_BALANCE_KEY, JSON.stringify(adjustments));
 }
 
+export async function getOvertimeGoals(): Promise<OvertimeGoals> {
+  const serialized = await getSettingValue(OVERTIME_GOALS_KEY);
+  return validateOvertimeGoals(JSON.parse(serialized ?? "{}"));
+}
+
+export async function setOvertimeGoal(month: string, minutes: number | null): Promise<void> {
+  validateOvertimeGoals({ [month]: minutes ?? 1 });
+  const goals = await getOvertimeGoals();
+  if (minutes === null) delete goals[month];
+  else goals[month] = minutes;
+  await setSettingValue(OVERTIME_GOALS_KEY, JSON.stringify(goals));
+}
+
 export async function getLeaveAllowances(): Promise<LeaveAllowanceSettings> {
   const serialized = await getSettingValue(LEAVE_ALLOWANCES_KEY);
   if (!serialized) {
@@ -848,13 +903,14 @@ export async function createBackup(): Promise<BackupData> {
   const autoSave = await getAutoSaveEnabled();
   const allowances = await getLeaveAllowances();
   const monthlyBalanceAdjustments = await getMonthlyBalanceAdjustments();
+  const overtimeGoals = await getOvertimeGoals();
   return backupSchema.parse({
     app: "torna-a-casa",
     version: 1,
     createdAt: new Date().toISOString(),
     days,
     leaves,
-    settings: { autoSave, allowances, monthlyBalanceAdjustments },
+    settings: { autoSave, allowances, monthlyBalanceAdjustments, overtimeGoals },
   });
 }
 
@@ -870,12 +926,18 @@ export async function restoreBackup(
   const mergedAdjustments = overwrite
     ? { ...currentAdjustments, ...importedAdjustments }
     : { ...importedAdjustments, ...currentAdjustments };
+  const currentGoals = await getOvertimeGoals();
+  const importedGoals = data.settings.overtimeGoals ?? {};
+  const mergedGoals = overwrite
+    ? { ...currentGoals, ...importedGoals }
+    : { ...importedGoals, ...currentGoals };
   if (!db) {
     changeWebData(() => {
       webSettingsStore.set(MONTHLY_BALANCE_KEY, JSON.stringify(mergedAdjustments));
+      webSettingsStore.set(OVERTIME_GOALS_KEY, JSON.stringify(mergedGoals));
       for (const { dayKey, ...record } of data.days)
         if (overwrite || !webDaysStore.has(dayKey))
-          webDaysStore.set(dayKey, record as WorkDayRecord);
+          webDaysStore.set(dayKey, normalizeRecord(record as WorkDayRecord));
       for (const entry of data.leaves)
         if (overwrite || !webLeaveEntriesStore.has(entry.id))
           webLeaveEntriesStore.set(entry.id, entry as LeaveEntry);
@@ -889,7 +951,7 @@ export async function restoreBackup(
   }
   const insert = overwrite ? "INSERT OR REPLACE" : "INSERT OR IGNORE";
   const statements = data.days.map((day) => ({
-    statement: `${insert} INTO work_days (day_key, morning_in, lunch_out, lunch_in, final_out, pause_no_exit, used_permit, permit_out, permit_in, calculated_json, encrypted_payload, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?);`,
+    statement: `${insert} INTO work_days (day_key, morning_in, lunch_out, lunch_in, final_out, pause_no_exit, used_permit, permit_out, permit_in, overtime_enabled, overtime_planned, calculated_json, encrypted_payload, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?);`,
     values: [
       day.dayKey,
       day.morningIn,
@@ -900,6 +962,8 @@ export async function restoreBackup(
       day.usedPermit ? 1 : 0,
       day.permitOut,
       day.permitIn,
+      day.overtimeEnabled ? 1 : 0,
+      day.overtimePlannedMinutes ?? 0,
       day.calculated ? JSON.stringify(day.calculated) : null,
       day.updatedAt,
     ],
@@ -921,6 +985,7 @@ export async function restoreBackup(
     [AUTO_SAVE_KEY, data.settings.autoSave ? "1" : "0"],
     [LEAVE_ALLOWANCES_KEY, JSON.stringify(data.settings.allowances)],
     [MONTHLY_BALANCE_KEY, JSON.stringify(mergedAdjustments)],
+    [OVERTIME_GOALS_KEY, JSON.stringify(mergedGoals)],
   ])
     statements.push({
       statement:

@@ -46,7 +46,7 @@ export const backupSchema = z
           permitOut: time,
           permitIn: time,
           overtimeEnabled: z.boolean().optional(),
-          overtimePlannedMinutes: z.number().int().min(0).max(1440).optional(),
+          overtimePlannedMinutes: z.number().int().min(0).max(360).optional(),
           calculated,
           updatedAt: timestamp,
         }),
@@ -72,6 +72,10 @@ export const backupSchema = z
       monthlyBalanceAdjustments: z.record(
         z.string().regex(/^(?!0000)\d{4}-(0[1-9]|1[0-2])$/),
         z.number().int().min(-1000000).max(1000000),
+      ).optional(),
+      overtimeGoals: z.record(
+        z.string().regex(/^(?!0000)\d{4}-(0[1-9]|1[0-2])$/),
+        z.number().int().min(1).max(1000000),
       ).optional(),
       allowances: z.object({
         year: z.number().int().min(2000).max(2100),
