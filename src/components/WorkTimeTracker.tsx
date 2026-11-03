@@ -535,7 +535,7 @@ const WorkTimeTracker: React.FC<WorkTimeTrackerProps> = ({ initialDayKey }) => {
           value={finalOut}
           onChange={setFinalOut}
           min="07:30"
-          max="19:00"
+          max={overtimeEnabled ? "23:59" : "19:00"}
           showNow={canSetCurrentTime}
         />
 

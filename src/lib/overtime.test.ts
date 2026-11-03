@@ -234,3 +234,32 @@ describe("straordinario mensile", () => {
     assert.equal(total[index], '"135"');
   });
 });
+
+describe("uscita oltre le 19:00 con straordinario", () => {
+  const late = (overrides: Partial<WorkDayRecord> = {}) =>
+    day({ finalOut: "19:42", overtimePlannedMinutes: 240, ...overrides });
+
+  it("con flag attivo 19:42 è valida e 270 minuti sono straordinario", () => {
+    const record = late();
+    assert.deepEqual(dayIssues(record), []);
+    const result = summarizeDay(record)!;
+    assert.equal(result.overtime, 270);
+    assert.equal(result.credit, 0);
+  });
+
+  it("con flag spento 19:42 resta non valida", () => {
+    const issues = dayIssues(late({ overtimeEnabled: false }));
+    assert.ok(
+      issues.includes("Uscita non successiva all’ingresso o oltre le 19:00"),
+    );
+  });
+
+  it("con flag attivo 23:59 è valida", () => {
+    assert.deepEqual(dayIssues(late({ finalOut: "23:59" })), []);
+  });
+
+  it("con flag attivo uscita prima dell’ingresso resta un errore", () => {
+    const issues = dayIssues(late({ finalOut: "07:00" }));
+    assert.ok(issues.some((i) => i.includes("Uscita non successiva")));
+  });
+});

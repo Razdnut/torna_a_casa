@@ -233,8 +233,8 @@ export default function Index() {
                     ? "Correggi gli orari per aggiornare la previsione."
                     : state.exit === null
                       ? "Registra l’ingresso per iniziare."
-                      : state.exit > 1140
-                        ? "L’obiettivo supera le 19:00: verifica la giornata."
+                      : state.exit > (record.overtimeEnabled ? 1439 : 1140)
+                        ? `L’obiettivo supera le ${record.overtimeEnabled ? "23:59" : "19:00"}: verifica la giornata.`
                         : reference >= state.exit
                           ? "Obiettivo raggiunto. Puoi registrare l’uscita."
                           : `Mancano ${formatDuration(state.exit - reference)} al tuo obiettivo.`}
