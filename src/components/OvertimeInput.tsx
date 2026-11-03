@@ -2,7 +2,11 @@ import React from "react";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { OVERTIME_MAX_PLANNED, OVERTIME_MIN } from "@/lib/day-summary";
+import {
+  OVERTIME_MAX_PLANNED,
+  OVERTIME_MIN,
+  clampPlannedOvertime,
+} from "@/lib/day-summary";
 
 interface OvertimeInputProps {
   enabled: boolean;
@@ -63,7 +67,9 @@ const OvertimeInput: React.FC<OvertimeInputProps> = ({
                 value={hours}
                 onChange={(event) =>
                   onMinutesChange(
-                    clamp(event.target.valueAsNumber, 6) * 60 + mins,
+                    clampPlannedOvertime(
+                      clamp(event.target.valueAsNumber, 6) * 60 + mins,
+                    ),
                   )
                 }
               />
@@ -81,7 +87,9 @@ const OvertimeInput: React.FC<OvertimeInputProps> = ({
                 value={mins}
                 onChange={(event) =>
                   onMinutesChange(
-                    hours * 60 + clamp(event.target.valueAsNumber, 59),
+                    clampPlannedOvertime(
+                      hours * 60 + clamp(event.target.valueAsNumber, 59),
+                    ),
                   )
                 }
               />

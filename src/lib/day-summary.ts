@@ -4,6 +4,10 @@ export const TARGET = 432;
 export const MIN_BREAK = 30;
 export const OVERTIME_MIN = 60;
 export const OVERTIME_MAX_PLANNED = 360;
+export function clampPlannedOvertime(minutes: number): number {
+  if (!Number.isFinite(minutes)) return 0;
+  return Math.min(OVERTIME_MAX_PLANNED, Math.max(0, Math.round(minutes)));
+}
 export function plannedOvertime(
   record: Pick<WorkDayRecord, "overtimeEnabled" | "overtimePlannedMinutes">,
 ): number {
