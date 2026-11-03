@@ -2,6 +2,15 @@ import type { WorkDayRecord, WorkDayCalculated } from "../types/worklog.ts";
 
 export const TARGET = 432;
 export const MIN_BREAK = 30;
+export const OVERTIME_MIN = 60;
+export const OVERTIME_MAX_PLANNED = 360;
+export function plannedOvertime(
+  record: Pick<WorkDayRecord, "overtimeEnabled" | "overtimePlannedMinutes">,
+): number {
+  return record.overtimeEnabled
+    ? record.overtimePlannedMinutes || OVERTIME_MIN
+    : 0;
+}
 export function minutes(value: string): number | null {
   if (!/^([01]\d|2[0-3]):[0-5]\d$/.test(value)) return null;
   return Number(value.slice(0, 2)) * 60 + Number(value.slice(3));
@@ -19,6 +28,8 @@ export function emptyDay(): WorkDayRecord {
     usedPermit: false,
     permitOut: "",
     permitIn: "",
+    overtimeEnabled: false,
+    overtimePlannedMinutes: 0,
     calculated: null,
     updatedAt: new Date().toISOString(),
   };
@@ -112,6 +123,16 @@ export function dayIssues(
     )
       issues.push("Permesso sovrapposto alla pausa pranzo");
   }
+  if (record.overtimeEnabled) {
+    const planned = record.overtimePlannedMinutes;
+    if (
+      planned &&
+      (!Number.isInteger(planned) ||
+        planned < OVERTIME_MIN ||
+        planned > OVERTIME_MAX_PLANNED)
+    )
+      issues.push("Straordinario previsto: da 1h00 a 6h00");
+  }
   return [...new Set(issues)];
 }
 
@@ -127,14 +148,27 @@ export function summarizeDay(record: WorkDayRecord) {
     0,
     minutes(record.finalOut)! - minutes(record.morningIn)! - pause - permit,
   );
+  const extra = worked - TARGET;
+  const overtime = record.overtimeEnabled && extra >= OVERTIME_MIN ? extra : 0;
   return {
     worked,
     pause,
     permit,
-    credit: Math.max(0, worked - TARGET),
+    overtime,
+    credit: overtime > 0 ? 0 : Math.max(0, extra),
     debt: Math.max(0, TARGET - worked),
-    balance: worked - TARGET,
+    balance: worked - TARGET - overtime,
   };
+}
+
+export const OVERTIME_WARNING =
+  "Non stai facendo il minimo di 1 ora per lo straordinario. Queste ore finiscono nel saldo, non nello straordinario.";
+
+export function overtimeWarning(record: WorkDayRecord): string | null {
+  if (!record.overtimeEnabled || !record.finalOut) return null;
+  const result = summarizeDay(record);
+  if (!result) return null;
+  return result.worked - TARGET < OVERTIME_MIN ? OVERTIME_WARNING : null;
 }
 
 export function calculateRecord(
@@ -149,6 +183,7 @@ export function calculateRecord(
     permitDuration: result.permit,
     credit: result.credit,
     debt: result.debt,
+    overtime: result.overtime,
     totalWithPermitIfReached: result.worked + result.permit,
     reachedWorkTime: result.worked >= TARGET,
   };
@@ -192,7 +227,7 @@ export function todayState(record: WorkDayRecord, nowMinutes: number) {
     record.usedPermit && pOut !== null
       ? Math.max(0, (pIn ?? nowMinutes) - pOut)
       : 0;
-  const exit = start === null ? null : start + TARGET + pause + permit;
+  const exit = start === null ? null : start + TARGET + pause + permit + plannedOvertime(record);
   const end = minutes(record.finalOut) ?? nowMinutes;
   const actualPause = record.pauseNoExit
     ? MIN_BREAK
