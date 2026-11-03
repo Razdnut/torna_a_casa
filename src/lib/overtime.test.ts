@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
+  clampPlannedOvertime,
   dayIssues,
   emptyDay,
   overtimeWarning,
@@ -261,5 +262,19 @@ describe("uscita oltre le 19:00 con straordinario", () => {
   it("con flag attivo uscita prima dell’ingresso resta un errore", () => {
     const issues = dayIssues(late({ finalOut: "07:00" }));
     assert.ok(issues.some((i) => i.includes("Uscita non successiva")));
+  });
+});
+
+describe("clampPlannedOvertime", () => {
+  it("limita al massimo senza applicare il fallback", () => {
+    assert.equal(clampPlannedOvertime(390), 360);
+    assert.equal(clampPlannedOvertime(360), 360);
+    assert.equal(clampPlannedOvertime(135), 135);
+    assert.equal(clampPlannedOvertime(0), 0);
+    assert.equal(clampPlannedOvertime(-5), 0);
+    assert.equal(clampPlannedOvertime(59), 59);
+    assert.equal(clampPlannedOvertime(Number.NaN), 0);
+    assert.equal(clampPlannedOvertime(Number.POSITIVE_INFINITY), 0);
+    assert.equal(clampPlannedOvertime(134.6), 135);
   });
 });

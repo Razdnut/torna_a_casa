@@ -7,6 +7,7 @@ import {
 import { defaultLeaveAllowances, isLeaveCategory } from "@/lib/leave";
 import { LeaveAllowanceSettings, LeaveEntry } from "@/types/leave";
 import { WorkDayEntry, WorkDayRecord } from "@/types/worklog";
+import { clampPlannedOvertime } from "./day-summary";
 import { backupSchema, type BackupData } from "./backup-data";
 import { validateMonthlyBalanceAdjustments, type MonthlyBalanceAdjustments } from "./month-balance";
 import { validateOvertimeGoals, type OvertimeGoals } from "./overtime-month";
@@ -174,14 +175,10 @@ function clearLegacyWebStorage(): void {
 }
 
 function normalizeRecord(record: WorkDayRecord): WorkDayRecord {
-  const planned = record.overtimePlannedMinutes;
   return {
     ...record,
     overtimeEnabled: record.overtimeEnabled === true,
-    overtimePlannedMinutes:
-      typeof planned === "number" && Number.isInteger(planned) && planned >= 0 && planned <= 360
-        ? planned
-        : 0,
+    overtimePlannedMinutes: clampPlannedOvertime(record.overtimePlannedMinutes ?? 0),
     updatedAt: record.updatedAt || new Date().toISOString(),
   };
 }
